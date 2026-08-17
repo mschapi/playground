@@ -1,0 +1,35 @@
+name: Bootstrap source
+
+on:
+  push:
+    paths:
+      - ".github/workflows/bootstrap-source.yml"
+      - ".bootstrap/source-url.txt"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  bootstrap:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Replace repository with Codex source archive
+        shell: bash
+        run: |
+          set -euo pipefail
+          URL="$(cat .bootstrap/source-url.txt)"
+          curl -fsSL "$URL" -o /tmp/source.zip
+          rm -rf /tmp/source
+          mkdir -p /tmp/source
+          unzip -q /tmp/source.zip -d /tmp/source
+          find . -mindepth 1 -maxdepth 1 ! -name .git -exec rm -rf {} +
+          shopt -s dotglob
+          cp -a /tmp/source/. .
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git diff --cached --quiet && exit 0
+          git commit -m "Publish media pipeline app"
+          git push
