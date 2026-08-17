@@ -1,0 +1,5 @@
+Pegá aca el guion cuando quieras disparar el pipeline desde GitHub.
+
+Tambien podés ejecutar localmente con:
+node src/index.js --script-file inputs/script.txt
+

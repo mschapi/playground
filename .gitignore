@@ -1,0 +1,10 @@
+﻿.env
+.env.*
+!.env.example
+node_modules/
+outputs/jobs/
+work/
+*.log
+tools/ffmpeg/
+keys.txt
+assets/fonts/*.ttf

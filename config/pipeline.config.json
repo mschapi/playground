@@ -1,0 +1,69 @@
+{
+  "projectName": "guion-media-pipeline",
+  "fps": 30,
+  "frameSize": {
+    "width": 1920,
+    "height": 1080
+  },
+  "wordsPerSecond": 2.1,
+  "minSceneDurationSeconds": 5,
+  "maxSceneDurationSeconds": 10,
+  "maxScenes": 0,
+  "outputRoot": "outputs/jobs",
+  "imageStylePrompt": "pixel art, soviet propaganda style, red color palette, futuristic hacker aesthetic, high contrast, digital dystopia",
+  "openai": {
+    "textModel": "gpt-5-mini",
+    "imageModel": "gpt-image-1",
+    "imageSize": "1536x1024",
+    "imageQuality": "medium",
+    "imageFormat": "png"
+  },
+  "pexels": {
+    "imageCount": 3,
+    "videoCount": 1,
+    "orientation": "landscape",
+    "locale": "",
+    "imageSearchPerPage": 5,
+    "videoSearchPerPage": 10,
+    "photoSearchUrl": "https://api.pexels.com/v1/search",
+    "videoSearchUrl": "https://api.pexels.com/v1/videos/search",
+    "imageSizePriority": [
+      "landscape",
+      "large",
+      "large2x",
+      "original"
+    ]
+  },
+  "brightData": {
+    "requestUrl": "https://api.brightdata.com/request",
+    "zone": "serp_api1",
+    "country": "ar",
+    "language": "es-419",
+    "googleHost": "www.google.com",
+    "format": "raw",
+    "unblockDataFormat": "parsed_light",
+    "blockedDownloadDomains": [
+      "facebook.com",
+      "lookaside.fbsbx.com",
+      "instagram.com",
+      "lookaside.instagram.com",
+      "tiktok.com",
+      "vecteezy.com"
+    ],
+    "imageCount": 3
+  },
+  "video": {
+    "enabled": true,
+    "subtitleFontName": "Chakra Petch",
+    "subtitleFontSize": 52,
+    "subtitleMaxChars": 38,
+    "subtitleMaxWords": 8,
+    "subtitleMarginV": 95,
+    "outputFileName": "video-ai-scenes.mp4"
+  },
+  "aiRenderMinDurationSeconds": 3,
+  "aiRenderMaxDurationSeconds": 6,
+  "xml": {
+    "pathMode": "tmp-filename"
+  }
+}

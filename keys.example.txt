@@ -1,0 +1,10 @@
+# Copiar a keys.txt y reemplazar los valores xx_*.
+# keys.txt esta ignorado por Git y gana sobre .env para rotar keys rapido.
+openai_key=xx_openai_key
+pexels_key=xx_pexels_key
+bright_data_key=xx_bright_data_key
+bright_data_zone=serp_api1
+bright_data_country=ar
+bright_data_language=es-419
+bright_data_format=raw
+bright_data_unblock_data_format=parsed_light
