@@ -1,0 +1,69 @@
+name: Run media pipeline
+
+on:
+  workflow_dispatch:
+    inputs:
+      script_file:
+        description: "Archivo de guion dentro del repo"
+        required: false
+        default: "inputs/script.txt"
+      gdoc_id:
+        description: "Google Doc ID opcional"
+        required: false
+        default: ""
+  push:
+    paths:
+      - "inputs/script.txt"
+      - "config/pipeline.config.json"
+      - "src/**"
+
+jobs:
+  run-pipeline:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+
+      - name: Install ffmpeg
+        run: sudo apt-get update && sudo apt-get install -y ffmpeg
+
+      - name: Run pipeline
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          OPENAI_TEXT_MODEL: ${{ vars.OPENAI_TEXT_MODEL || 'gpt-5' }}
+          OPENAI_IMAGE_MODEL: ${{ vars.OPENAI_IMAGE_MODEL || 'gpt-image-1' }}
+          OPENAI_IMAGE_SIZE: ${{ vars.OPENAI_IMAGE_SIZE || '1536x1024' }}
+          OPENAI_IMAGE_QUALITY: ${{ vars.OPENAI_IMAGE_QUALITY || 'medium' }}
+          PEXELS_API_KEY: ${{ secrets.PEXELS_API_KEY }}
+          BRIGHTDATA_API_KEY: ${{ secrets.BRIGHTDATA_API_KEY }}
+          BRIGHTDATA_ZONE: ${{ secrets.BRIGHTDATA_ZONE }}
+          BRIGHTDATA_COUNTRY: ${{ vars.BRIGHTDATA_COUNTRY || 'ar' }}
+          BRIGHTDATA_LANGUAGE: ${{ vars.BRIGHTDATA_LANGUAGE || 'es-419' }}
+          BRIGHTDATA_UNBLOCK_DATA_FORMAT: ${{ vars.BRIGHTDATA_UNBLOCK_DATA_FORMAT || 'parsed_light' }}
+          GOOGLE_SERVICE_ACCOUNT_JSON: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_JSON }}
+          SOURCE_GDOC_ID: ${{ secrets.SOURCE_GDOC_ID }}
+          DRIVE_ID: ${{ secrets.DRIVE_ID }}
+          DRIVE_PARENT_FOLDER_ID: ${{ secrets.DRIVE_PARENT_FOLDER_ID }}
+          XML_PATH_MODE: ${{ vars.XML_PATH_MODE || 'tmp-filename' }}
+          DRIVE_UPLOAD: "true"
+        shell: bash
+        run: |
+          GDOC_ID="${{ github.event.inputs.gdoc_id || '' }}"
+          SCRIPT_FILE="${{ github.event.inputs.script_file || 'inputs/script.txt' }}"
+
+          if [ -n "$GDOC_ID" ]; then
+            node src/index.js --gdoc-id "$GDOC_ID"
+          else
+            node src/index.js --script-file "$SCRIPT_FILE"
+          fi
+
+      - name: Upload local artifact backup
+        uses: actions/upload-artifact@v4
+        with:
+          name: pipeline-outputs
+          path: outputs/jobs/**
