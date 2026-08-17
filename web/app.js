@@ -1,4 +1,4 @@
-﻿const API_BASE = resolveApiBase();
+const API_BASE = resolveApiBase();
 
 const state = {
   job: null,
@@ -152,7 +152,7 @@ function bindEvents() {
 
 async function loadHealth() {
   try {
-    const health = await api('/api/health');
+    const health = await api('/api/health', { timeoutMs: 3500 });
     if (health.apiReady) {
       els.envStatus.textContent = 'APIs listas';
       els.envStatus.className = 'status-pill ready';
@@ -170,7 +170,7 @@ async function loadHealth() {
 
 async function loadPreflight() {
   try {
-    state.preflight = await api('/api/preflight');
+    state.preflight = await api('/api/preflight', { timeoutMs: 3500 });
     if (!state.imageStylePrompt && state.preflight?.config?.imageStylePrompt) {
       state.imageStylePrompt = state.preflight.config.imageStylePrompt;
     }
@@ -983,13 +983,26 @@ function empty(target) {
 }
 
 async function api(path, options = {}) {
-  const response = await fetch(API_BASE + path, {
+  const { timeoutMs = 0, ...fetchOptions } = options;
+  const controller = timeoutMs > 0 ? new AbortController() : null;
+  const timeout = controller ? window.setTimeout(() => controller.abort(), timeoutMs) : null;
+  const requestOptions = {
     headers: { 'Content-Type': 'application/json' },
-    ...options
-  });
-  const data = await response.json().catch(() => ({}));
-  if (!response.ok) throw new Error(data.error || 'Error de servidor');
-  return data;
+    ...fetchOptions
+  };
+  if (controller && !requestOptions.signal) requestOptions.signal = controller.signal;
+
+  try {
+    const response = await fetch(API_BASE + path, requestOptions);
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(data.error || 'Error de servidor');
+    return data;
+  } catch (error) {
+    if (error.name === 'AbortError') throw new Error('Backend no responde');
+    throw error;
+  } finally {
+    if (timeout) window.clearTimeout(timeout);
+  }
 }
 
 function readFileAsDataUrl(file) {
