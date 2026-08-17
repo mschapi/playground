@@ -1,0 +1,163 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Playground de guiones</title>
+    <link rel="stylesheet" href="styles.css?v=20260817-339ebc7" />
+  </head>
+  <body>
+    <main class="app-shell">
+      <header class="topbar">
+        <div>
+          <p class="eyebrow">Pipeline audiovisual</p>
+          <h1>Playground de guiones</h1>
+        </div>
+        <div class="status-pill" id="envStatus">Conectando</div>
+      </header>
+
+      <section class="workspace">
+        <aside class="script-panel">
+          <div class="panel-heading">
+            <h2>Guion</h2>
+            <label class="switch">
+              <input type="checkbox" id="dryRunToggle" />
+              <span>Prueba</span>
+            </label>
+          </div>
+          <textarea id="scriptInput" spellcheck="true" placeholder="Pega el guion aca"></textarea>
+          <div class="actions-row">
+            <button class="primary" id="runButton">Ejecutar</button>
+            <button class="secondary" id="sampleButton">Cargar ejemplo</button>
+          </div>
+          <div class="job-progress">
+            <div class="progress-head">
+              <span id="phaseLabel">Sin corrida</span>
+              <span id="progressLabel">0%</span>
+            </div>
+            <div class="progress-track"><div id="progressBar"></div></div>
+          </div>
+        </aside>
+
+        <section class="review-panel">
+          <nav class="tabs" aria-label="Vistas">
+            <button class="tab active" data-tab="scenes">Escenas</button>
+            <button class="tab" data-tab="assets">Assets</button>
+            <button class="tab" data-tab="builder">Crear video</button>
+            <button class="tab" data-tab="debug">Debug</button>
+          </nav>
+
+          <section class="tab-view active" id="scenesView">
+            <div class="section-head scenes-head">
+              <div>
+                <h2>Escenas</h2>
+                <p class="muted" id="sceneDurationTotal">Duracion aprox 0s</p>
+              </div>
+              <div class="actions-row compact-actions">
+                <button class="secondary" id="importScenesButton" disabled>Importar escenas</button>
+                <input class="hidden-input" id="sceneImportInput" type="file" accept=".json,.txt,text/plain,application/json" />
+                <button class="secondary" id="saveScenesButton" disabled>Guardar escenas</button>
+                <button class="primary" id="generateAssetsButton" disabled>Generar assets</button>
+                <button class="secondary" id="createVideoButton" disabled>Crear video</button>
+              </div>
+            </div>
+            <div class="scene-list" id="sceneList"></div>
+          </section>
+
+          <section class="tab-view" id="assetsView">
+            <div class="section-head assets-head">
+              <div>
+                <h2>Previews</h2>
+                <p class="muted" id="assetDurationTotal">Duracion aprox 0s</p>
+              </div>
+              <div class="actions-row compact-actions">
+                <span class="muted" id="assetCount">0 assets</span>
+                <button class="secondary" id="stylePromptButton" disabled>Estilo IA</button>
+                <a class="secondary download-link" id="downloadAll" href="#" download hidden>Descargar todo</a>
+                <a class="secondary download-link" id="downloadAi" href="#" download hidden>IA</a>
+                <a class="secondary download-link" id="downloadPexelsImages" href="#" download hidden>Pexels img</a>
+                <a class="secondary download-link" id="downloadPexelsVideos" href="#" download hidden>Pexels video</a>
+                <a class="secondary download-link" id="downloadGoogle" href="#" download hidden>Google</a>
+              </div>
+            </div>
+            <div class="style-panel" id="stylePromptPanel" hidden>
+              <label class="field-label">Estilo IA
+                <textarea class="scene-textarea prompt" id="stylePromptTextarea"></textarea>
+              </label>
+            </div>
+            <div class="asset-board" id="assetBoard"></div>
+          </section>
+
+          <section class="tab-view" id="builderView">
+            <div class="builder-layout">
+              <div class="builder-main">
+                <div class="section-head builder-head">
+                  <div>
+                    <h2 id="builderTitle">Crear video</h2>
+                    <p class="muted" id="builderSub">Elegi una opcion por escena</p>
+                  </div>
+                  <div class="builder-head-actions">
+                    <button class="secondary" id="builderImportAssetButton" disabled>Importar imagen</button>
+                    <input class="hidden-input" id="builderImportAssetInput" type="file" accept="image/*,video/*" />
+                    <label class="switch compact-switch">
+                      <input type="checkbox" id="multiSelectToggle" />
+                      <span>Multiple</span>
+                    </label>
+                    <div class="step-count" id="stepCount">0/0</div>
+                  </div>
+                </div>
+                <div class="choice-grid" id="choiceGrid"></div>
+                <div class="actions-row builder-actions">
+                  <button class="secondary" id="backSceneButton">Volver</button>
+                  <button class="secondary" id="skipSceneButton">Usar primera</button>
+                  <button class="primary" id="nextSceneButton">Siguiente</button>
+                </div>
+              </div>
+              <aside class="render-panel">
+                <h3>Final</h3>
+                <p class="muted" id="builderDurationTotal">Duracion aprox 0s</p>
+                <div class="audio-mode">
+                  <label class="switch compact-switch"><input type="radio" name="audioMode" value="full" checked /> <span>Audio entero</span></label>
+                  <label class="switch compact-switch"><input type="radio" name="audioMode" value="scenes" /> <span>Audio por escena</span></label>
+                </div>
+                <label class="audio-drop" id="audioDrop" for="audioInput">
+                  <span id="audioLabel">Audio opcional</span>
+                  <input id="audioInput" type="file" accept="audio/*" />
+                </label>
+                <div id="sceneAudioList" class="scene-audio-list" hidden></div>
+                <button class="primary" id="renderButton" disabled>Renderizar video</button>
+                <a class="secondary download-link" id="downloadSelected" href="#" download hidden>Descargar seleccion</a>
+                <div id="selectedSummary" class="selected-summary"></div>
+                <div id="finalVideo" class="final-video"></div>
+              </aside>
+            </div>
+          </section>
+
+          <section class="tab-view" id="debugView">
+            <div class="section-head">
+              <div>
+                <h2>Debug</h2>
+                <p class="muted">Preflight, trazas y archivos guardados por etapa.</p>
+              </div>
+              <div class="actions-row compact-actions">
+                <button class="secondary" id="preflightButton">Preflight</button>
+                <button class="secondary" id="refreshDebugButton">Actualizar</button>
+              </div>
+            </div>
+            <div class="debug-grid" id="preflightGrid"></div>
+            <div class="debug-actions">
+              <a id="debugDownload" class="debug-link" href="#" download hidden>Descargar debug-log.json</a>
+            </div>
+            <pre class="debug-log" id="debugLog">Todavia no hay eventos.</pre>
+          </section>
+        </section>
+      </section>
+    </main>
+
+    <template id="emptyTemplate">
+      <div class="empty-state">Todavia no hay resultados.</div>
+    </template>
+
+    <script src="app.js?v=20260817-339ebc7" type="module"></script>
+  </body>
+</html>
