@@ -505,7 +505,11 @@ function normalizeScenes(inputScenes, runId, existingScenes = []) {
     const sceneId = uniqueSceneValue(preferredId, fallbackLabel, usedIds);
     const sceneLabel = uniqueSceneValue(preferredLabel, sceneId, usedLabels);
     const scriptText = String(scene.script_text ?? scene.narration ?? previous.script_text ?? previous.narration ?? '').trim();
-    const durationSeconds = toPositiveNumber(scene.duration_seconds ?? previous.duration_seconds, 4);
+    const estimatedDuration = estimateDurationSeconds(scriptText);
+    const hasExistingScenes = Boolean(existingScenes?.length);
+    const durationSeconds = hasExistingScenes
+      ? toPositiveNumber(scene.duration_seconds ?? previous.duration_seconds, estimatedDuration)
+      : normalizeGeneratedDuration(scene.duration_seconds ?? previous.duration_seconds, estimatedDuration);
     const renderDurationSeconds = toPositiveNumber(
       scene.render_duration_seconds ?? previous.render_duration_seconds ?? durationSeconds,
       durationSeconds
@@ -782,6 +786,22 @@ function buildSelectionRecord({ job, selectionPlan, renderClips, audioMode, audi
 
 function totalSceneDuration(scenes = []) {
   return scenes.reduce((sum, scene) => sum + Math.max(0, Number(scene.duration_seconds || 0)), 0);
+}
+
+function estimateDurationSeconds(text) {
+  const words = String(text || '').trim().split(/\s+/).filter(Boolean).length;
+  const secondsPerWord = Number(config.sceneSecondsPerWord || 0.41);
+  const min = Number(config.minSceneDurationSeconds || 1.5);
+  const max = Number(config.maxSceneDurationSeconds || 18);
+  const estimated = Math.round(Math.max(0.5, words * secondsPerWord) * 2) / 2;
+  return Math.min(Math.max(estimated, min), max);
+}
+
+function normalizeGeneratedDuration(value, estimatedDuration) {
+  const raw = Number(value);
+  if (!Number.isFinite(raw) || raw <= 0) return estimatedDuration;
+  if (raw < estimatedDuration * 0.6 || raw > estimatedDuration * 1.5) return estimatedDuration;
+  return Math.round(raw * 2) / 2;
 }
 
 function findSelectedAsset(assets, key) {

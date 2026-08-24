@@ -23,7 +23,8 @@ export function normalizeScenes(rawScenes, config) {
         scene.google_image_query ||
         summarizeQuery(visualIntent || scriptText)
     );
-    const duration = Number(scene.duration_seconds) || estimateDurationSeconds(scriptText, config);
+    const estimatedDuration = estimateDurationSeconds(scriptText, config);
+    const duration = normalizeGeneratedDuration(scene.duration_seconds, estimatedDuration);
     const renderDuration = clamp(
       Number(scene.render_duration_seconds || duration),
       config.aiRenderMinDurationSeconds,
@@ -104,4 +105,11 @@ function ensureStyle(prompt, style) {
     return normalizedPrompt;
   }
   return normalizeWhitespace(normalizedPrompt + ', ' + normalizedStyle);
+}
+
+function normalizeGeneratedDuration(value, estimatedDuration) {
+  const raw = Number(value);
+  if (!Number.isFinite(raw) || raw <= 0) return estimatedDuration;
+  if (raw < estimatedDuration * 0.6 || raw > estimatedDuration * 1.5) return estimatedDuration;
+  return Math.round(raw * 2) / 2;
 }

@@ -14,12 +14,17 @@ export function clamp(value, min, max) {
 
 export function estimateDurationSeconds(text, config) {
   const words = wordCount(text);
-  const estimated = Math.ceil(words / config.wordsPerSecond);
+  const secondsPerWord = Number(config.sceneSecondsPerWord || 0.41);
+  const estimated = roundToHalfSecond(words * secondsPerWord);
   return clamp(
     estimated,
     config.minSceneDurationSeconds,
     config.maxSceneDurationSeconds
   );
+}
+
+function roundToHalfSecond(value) {
+  return Math.max(0.5, Math.round(Number(value || 0) * 2) / 2);
 }
 
 export function summarizeQuery(text, maxWords = 8) {

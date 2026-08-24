@@ -11,6 +11,10 @@ export function loadConfig(configPath = 'config/pipeline.config.json') {
   return {
     ...base,
     fps: numberEnv('FPS', base.fps),
+    sceneSecondsPerWord: numberEnv(
+      'SCENE_SECONDS_PER_WORD',
+      base.sceneSecondsPerWord ?? 0.41
+    ),
     wordsPerSecond: numberEnv('WORDS_PER_SECOND', base.wordsPerSecond),
     minSceneDurationSeconds: numberEnv(
       'MIN_SCENE_DURATION_SECONDS',

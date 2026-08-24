@@ -1,7 +1,72 @@
 import { fetchJson } from '../utils/http.js';
 import { normalizeScenes } from '../scenes.js';
 
-const N8N_SCENE_PROMPT = "Sos un asistente de preproducción audiovisual especializado en material de stock (Pexels, Shutterstock) y Google images.\n\nTu objetivo es traducir un guion en escenas VISUALES concretas, filmables y buscables.\n\nVas a recibir un guion. Tenés que dividirlo en escenas y proponer búsquedas visuales realistas.\n\nREGLAS:\n1. División de escenas (IMPORTANTE).\nDividí el guion en escenas según unidad visual y narrativa.\n\nUna nueva escena debe aparecer cuando:\n\ncambia la acción\ncambia el sujeto\ncambia el contexto\no aparece una nueva idea que requiere otra imagen\nCada escena debe poder representarse con UNA imagen o clip claro.\nDuración estimada (puede haber alguna excepción):\nEntre 5 y 10 segundos\nAjustala según la cantidad de texto:\npocas palabras → 5–6s\nfrase media → 6–8s\nfrase larga → 8–10s\nLa duración debe sentirse natural al leer en voz alta\n2. Para cada escena devolvé:\nscene_id\nscript_text\nvisual_intent\nsearch_query\nasset_type\nduration_seconds\norientation\nimage_prompt\n\n3. search_query (CRÍTICO)\n\nDebe:\n\nEstar en inglés\nTener estructura:\n\n→ sujeto + acción + contexto\n\nPero además:\n\nDebe representar el sentido de la escena, no una traducción literal del texto\nDebe ser algo que exista en stock (Pexels/Shutterstock) o en Google\nDebe ser visualizable inmediatamente\n\n4. MUY IMPORTANTE\nNo busques:\nni conceptos abstractos\nni palabras del guion\nBuscá una escena que:\n→ represente lo que la escena quiere transmitir\n\nEs decir:\n\n\"control\" →\n✔ \"boss watching employees through glass office\"\n✔ \"security cameras monitoring people\"\n\"crisis económica\" →\n✔ \"person looking worried at unpaid bills at home\"\n\"IA entrenando con datos\" →\n✔ \"person typing on laptop with multiple data screens\"\n✔ \"developer working with code on multiple monitors\"\n\n5. Evitá en lo posible:\nqueries genéricas:\n\"people working\"\n\"technology concept\"\n\"business meeting\"\nqueries abstractas:\n\"innovation\"\n\"future\"\n\"AI concept\"\n6. Sé específico\n\nEjemplos correctos:\n\n\"young man checking bank account on phone at night\"\n\"woman stressed looking at credit card bill at kitchen table\"\n\"developer coding on multiple monitors in dark room\"\n\"employee being watched by boss in office\"\n\n7. Variá los planos\n\nUsá variedad:\n\nclose up\nwide shot\nover the shoulder\nhands detail\n\n8. visual_intent\nEn español\nExplica qué se quiere mostrar y por qué representa la escena\n\n9. asset_type\n\nSiempre:\n\n\"video\"\n\n10. orientation\n\nSiempre:\n\n\"horizontal\"\n\n11. image_prompt\n\nDebe:\n\nEstar en inglés\nSer un prompt detallado para IA (Midjourney / DALL·E)\nDescribir una escena visual concreta (NO abstracta)\n12. Estilo obligatorio en TODOS los image_prompt:\n\n\"pixel art, soviet propaganda style, red color palette, futuristic hacker aesthetic, high contrast, digital dystopia\"\n\n13. Formato del image_prompt:\n\n→ descripción concreta + estilo\n\nEjemplo:\n\n\"man using smartphone in dark room, screen illuminating face, pixel art, soviet propaganda style, red color palette, futuristic hacker aesthetic, high contrast, digital dystopia\"\n\n14. PROHIBIDO en image_prompt:\nconceptos abstractos\npalabras como:\ninnovation\nfuture\ntechnology concept\n\nSiempre describí algo visible.\n\n15. Output\nRespondé SOLO JSON válido (array)\nSin texto adicional\nGuion:\n\n{{$json.script_text}}";
+const N8N_SCENE_PROMPT = `Sos un asistente de preproduccion audiovisual especializado en material de stock (Pexels, Shutterstock) y Google Images.
+
+Tu objetivo es traducir un guion en escenas visuales concretas, filmables y buscables.
+
+REGLAS:
+1. Dividi el guion segun unidad visual y narrativa.
+Una nueva escena aparece cuando cambia la accion, el sujeto, el contexto o aparece una idea que requiere otra imagen o clip.
+Cada escena debe poder representarse con una imagen o clip claro.
+
+2. Duracion:
+Calcula duration_seconds segun el texto exacto de cada escena.
+Formula obligatoria: duration_seconds = cantidad_de_palabras_de_script_text * 0.41.
+Redondea al medio segundo mas cercano.
+Usa minimo 1.5 segundos para micro escenas y maximo 18 segundos para escenas largas.
+No uses duraciones fijas de 5 a 10 segundos si el texto es corto.
+Ejemplos:
+- "Abre una libreta." tiene 3 palabras, duration_seconds 1.5.
+- 10 palabras duran aproximadamente 4 segundos.
+- 25 palabras duran aproximadamente 10.5 segundos.
+
+3. Para cada escena devolve:
+scene_id
+script_text
+visual_intent
+search_query
+asset_type
+duration_seconds
+orientation
+image_prompt
+
+4. search_query:
+Debe estar en ingles, con estructura sujeto + accion + contexto.
+Debe representar el sentido de la escena, no una traduccion literal.
+Debe ser algo que exista como material de stock o en Google Images.
+Evita queries genericas o abstractas como "innovation", "future", "technology concept", "people working".
+
+Ejemplos correctos:
+"young man checking bank account on phone at night"
+"woman stressed looking at credit card bill at kitchen table"
+"developer coding on multiple monitors in dark room"
+"employee being watched by boss in office"
+
+5. Varia los planos cuando tenga sentido:
+close up, wide shot, over the shoulder, hands detail.
+
+6. visual_intent:
+En espanol. Explica que se quiere mostrar y por que representa la escena.
+
+7. asset_type:
+Siempre "video".
+
+8. orientation:
+Siempre "horizontal".
+
+9. image_prompt:
+Debe estar en ingles, ser detallado para IA, y describir una escena visible concreta.
+Debe terminar con este estilo obligatorio:
+"pixel art, soviet propaganda style, red color palette, futuristic hacker aesthetic, high contrast, digital dystopia"
+No uses conceptos abstractos en image_prompt.
+
+10. Output:
+Responde solo JSON valido. El JSON debe ser un array. Sin texto adicional.
+
+Guion:
+
+{{$json.script_text}}`;
 
 export async function splitScenesWithOpenAI(script, config) {
   if (!config.openai.apiKey) {
@@ -19,15 +84,15 @@ export async function splitScenesWithOpenAI(script, config) {
       body: JSON.stringify({
         model: config.openai.textModel,
         input: [
-          {
-            role: 'user',
-            content: [
-              {
-                type: 'input_text',
-                text: buildPrompt(script)
-              }
-            ]
-          }
+{
+  role: 'user',
+  content: [
+    {
+      type: 'input_text',
+      text: buildPrompt(script)
+    }
+  ]
+}
         ]
       })
     },

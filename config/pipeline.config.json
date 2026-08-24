@@ -5,9 +5,9 @@
     "width": 1920,
     "height": 1080
   },
-  "wordsPerSecond": 2.1,
-  "minSceneDurationSeconds": 5,
-  "maxSceneDurationSeconds": 10,
+  "wordsPerSecond": 2.44,
+  "minSceneDurationSeconds": 1.5,
+  "maxSceneDurationSeconds": 18,
   "maxScenes": 0,
   "outputRoot": "outputs/jobs",
   "imageStylePrompt": "pixel art, soviet propaganda style, red color palette, futuristic hacker aesthetic, high contrast, digital dystopia",
@@ -65,5 +65,6 @@
   "aiRenderMaxDurationSeconds": 6,
   "xml": {
     "pathMode": "tmp-filename"
-  }
+  },
+  "sceneSecondsPerWord": 0.41
 }
