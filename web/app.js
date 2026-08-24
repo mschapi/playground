@@ -1049,6 +1049,12 @@ function escapeAttr(value) {
 }
 
 function resolveApiBase() {
+  const queryBase = new URLSearchParams(location.search).get('apiBase');
+  if (queryBase) {
+    const clean = queryBase.replace(/\/$/, '');
+    localStorage.setItem('playgroundApiBase', clean);
+    return clean;
+  }
   const saved = localStorage.getItem('playgroundApiBase');
   if (saved) return saved.replace(/\/$/, '');
   if (location.hostname === 'localhost' || location.hostname === '127.0.0.1') return '';
