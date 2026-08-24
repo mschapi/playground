@@ -683,13 +683,13 @@ function renderFinal() {
 
   if (job.video.url) {
     const video = document.createElement('video');
-    video.src = job.video.url;
+    video.src = fileLink(job.video.url);
     video.controls = true;
     video.playsInline = true;
     els.finalVideo.append(video);
 
     const link = document.createElement('a');
-    link.href = job.video.url;
+    link.href = fileLink(job.video.url);
     link.download = 'video-final.mp4';
     link.textContent = 'Descargar video';
     els.finalVideo.append(link);
@@ -897,7 +897,7 @@ function assetTile(asset, interactive, scene) {
 function mediaForAsset(asset) {
   if (isAssetVideo(asset)) {
     const video = document.createElement('video');
-    video.src = asset.url;
+    video.src = fileLink(asset.url);
     video.muted = true;
     video.loop = true;
     video.controls = true;
@@ -910,7 +910,7 @@ function mediaForAsset(asset) {
   }
 
   const img = document.createElement('img');
-  img.src = asset.url;
+  img.src = fileLink(asset.url);
   img.alt = labelForAsset(asset);
   img.loading = 'lazy';
   img.addEventListener('error', () => {
@@ -954,6 +954,13 @@ function labelForAsset(asset) {
   if (asset.type === 'pexels-video') return 'Pexels video';
   if (asset.type === 'brightdata-google-image') return 'Google imagen';
   return 'Asset';
+}
+
+function fileLink(url) {
+  const value = String(url || '');
+  if (!value) return '';
+  if (/^(https?:|data:|blob:)/i.test(value)) return value;
+  return API_BASE + value;
 }
 
 function isAssetVideo(asset) {
