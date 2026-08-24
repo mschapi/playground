@@ -1,4 +1,4 @@
-const API_BASE = resolveApiBase();
+let API_BASE = resolveApiBase();
 
 const state = {
   job: null,
@@ -77,7 +77,8 @@ init();
 
 async function init() {
   bindEvents();
-  await Promise.all([loadHealth(), loadPreflight()]);
+  await loadHealth();
+  await loadPreflight();
   renderAll();
 }
 
@@ -163,8 +164,28 @@ async function loadHealth() {
       els.dryRunToggle.checked = true;
     }
   } catch {
+    if (await tryLocalBackendFallback()) return;
     els.envStatus.textContent = 'Sin backend';
     els.envStatus.className = 'status-pill warn';
+  }
+}
+
+async function tryLocalBackendFallback() {
+  if (localStorage.getItem('playgroundApiBase')) return false;
+  if (location.hostname === 'localhost' || location.hostname === '127.0.0.1') return false;
+  if (API_BASE === 'http://localhost:8787') return false;
+
+  const previousBase = API_BASE;
+  API_BASE = 'http://localhost:8787';
+  try {
+    const health = await api('/api/health', { timeoutMs: 3500 });
+    els.envStatus.textContent = health.apiReady ? 'APIs locales listas' : 'Backend local en prueba';
+    els.envStatus.className = health.apiReady ? 'status-pill ready' : 'status-pill warn';
+    els.dryRunToggle.checked = !health.apiReady;
+    return true;
+  } catch {
+    API_BASE = previousBase;
+    return false;
   }
 }
 
