@@ -1,0 +1,68 @@
+name: Codex patch apiBase query
+
+on:
+  push:
+    paths:
+      - ".github/workflows/codex-patch-api-base-query.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: true
+
+      - name: Add apiBase query support
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import datetime
+
+          insert = """function resolveApiBase() {
+            const queryBase = new URLSearchParams(location.search).get('apiBase');
+            if (queryBase) {
+              const clean = queryBase.replace(/\\/$/, '');
+              localStorage.setItem('playgroundApiBase', clean);
+              return clean;
+            }
+          """.strip()
+
+          for path in ['web/app.js', 'docs/app.js']:
+              p = Path(path)
+              text = p.read_text(encoding='utf-8-sig')
+              if "get('apiBase')" not in text:
+                  text = text.replace('function resolveApiBase() {', insert, 1)
+              p.write_text(text, encoding='utf-8', newline='\n')
+
+          for path in ['web/index.html', 'docs/index.html']:
+              p = Path(path)
+              text = p.read_text(encoding='utf-8')
+              text = text.replace('20260824-fallback', '20260824-apibase')
+              p.write_text(text, encoding='utf-8', newline='\n')
+
+          Path('docs/deploy-version.txt').write_text('api-base-query ' + datetime.datetime.utcnow().isoformat(timespec='seconds') + 'Z\n', encoding='utf-8')
+          PY
+
+      - name: Validate JavaScript
+        run: |
+          node --check web/app.js
+          node --check docs/app.js
+
+      - name: Commit changes
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add web/app.js docs/app.js web/index.html docs/index.html docs/deploy-version.txt
+          if git diff --cached --quiet; then
+            echo "No changes to commit"
+            exit 0
+          fi
+          git commit -m "Allow Pages apiBase query override"
+          git push
