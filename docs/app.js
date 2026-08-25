@@ -8,6 +8,12 @@ const state = {
   audio: null,
   audioMode: 'full',
   sceneAudios: {},
+  subtitleStyle: {
+    fontName: 'Chakra Petch',
+    fontSize: 52,
+    textColor: '#ffffff',
+    backgroundColor: '#c21824'
+  },
   imageStylePrompt: '',
   stylePromptOpen: false,
   preflight: null,
@@ -16,6 +22,12 @@ const state = {
 
 const els = {
   envStatus: document.querySelector('#envStatus'),
+  serverButton: document.querySelector('#serverButton'),
+  serverPanel: document.querySelector('#serverPanel'),
+  apiBaseInput: document.querySelector('#apiBaseInput'),
+  saveServerButton: document.querySelector('#saveServerButton'),
+  localServerButton: document.querySelector('#localServerButton'),
+  clearServerButton: document.querySelector('#clearServerButton'),
   dryRunToggle: document.querySelector('#dryRunToggle'),
   scriptInput: document.querySelector('#scriptInput'),
   runButton: document.querySelector('#runButton'),
@@ -56,6 +68,11 @@ const els = {
   audioDrop: document.querySelector('#audioDrop'),
   audioLabel: document.querySelector('#audioLabel'),
   sceneAudioList: document.querySelector('#sceneAudioList'),
+  subtitlePreview: document.querySelector('#subtitlePreview'),
+  subtitleFontName: document.querySelector('#subtitleFontName'),
+  subtitleFontSize: document.querySelector('#subtitleFontSize'),
+  subtitleTextColor: document.querySelector('#subtitleTextColor'),
+  subtitleBackgroundColor: document.querySelector('#subtitleBackgroundColor'),
   downloadSelected: document.querySelector('#downloadSelected'),
   renderButton: document.querySelector('#renderButton'),
   selectedSummary: document.querySelector('#selectedSummary'),
@@ -90,6 +107,14 @@ function bindEvents() {
   els.sampleButton.addEventListener('click', () => {
     els.scriptInput.value = sampleScript;
   });
+
+  els.serverButton.addEventListener('click', () => {
+    els.serverPanel.hidden = !els.serverPanel.hidden;
+    syncServerInput();
+  });
+  els.saveServerButton.addEventListener('click', saveServerBase);
+  els.localServerButton.addEventListener('click', useLocalServerBase);
+  els.clearServerButton.addEventListener('click', clearServerBase);
 
   els.runButton.addEventListener('click', createJob);
   els.importScenesButton.addEventListener('click', () => els.sceneImportInput.click());
@@ -146,6 +171,9 @@ function bindEvents() {
   });
 
   els.audioInput.addEventListener('change', handleAudio);
+  [els.subtitleFontName, els.subtitleFontSize, els.subtitleTextColor, els.subtitleBackgroundColor].forEach((input) => {
+    input.addEventListener('input', updateSubtitleStyleFromInputs);
+  });
   els.renderButton.addEventListener('click', renderVideo);
   els.preflightButton.addEventListener('click', loadPreflight);
   els.refreshDebugButton.addEventListener('click', refreshDebug);
@@ -165,8 +193,10 @@ async function loadHealth() {
     }
   } catch {
     if (await tryLocalBackendFallback()) return;
-    els.envStatus.textContent = 'Sin backend';
+    els.envStatus.textContent = isPublishedPage() ? 'Sin backend publico' : 'Sin backend';
     els.envStatus.className = 'status-pill warn';
+    els.serverPanel.hidden = false;
+    syncServerInput();
   }
 }
 
@@ -195,6 +225,7 @@ async function loadPreflight() {
     if (!state.imageStylePrompt && state.preflight?.config?.imageStylePrompt) {
       state.imageStylePrompt = state.preflight.config.imageStylePrompt;
     }
+    applySubtitleDefaults(state.preflight?.config?.video);
   } catch (error) {
     state.preflight = { error: error.message, checks: {} };
   }
@@ -366,7 +397,8 @@ async function renderVideo() {
         selections: state.selections,
         audioMode: state.audioMode,
         audio: state.audioMode === 'full' ? state.audio : null,
-        sceneAudios: state.audioMode === 'scenes' ? state.sceneAudios : {}
+        sceneAudios: state.audioMode === 'scenes' ? state.sceneAudios : {},
+        subtitleStyle: state.subtitleStyle
       })
     });
     state.job = response;
@@ -557,6 +589,7 @@ function renderBuilder() {
   els.stepCount.textContent = list.length ? Math.min(state.builderIndex + 1, list.length) + '/' + list.length : '0/0';
   renderSelectedSummary();
   renderAudioControls();
+  renderSubtitleControls();
   els.builderDurationTotal.textContent = 'Duracion aprox ' + formatClock(totalDurationSeconds(list));
   els.renderButton.disabled = !list.length || !allScenesSelected() || state.job?.status === 'rendering';
 
@@ -650,7 +683,7 @@ function renderDebug() {
   const debug = state.job?.debug;
   if (debug?.logUrl) {
     els.debugDownload.hidden = false;
-    els.debugDownload.href = API_BASE + debug.logUrl;
+    els.debugDownload.href = fileLink(debug.logUrl);
   } else {
     els.debugDownload.hidden = true;
     els.debugDownload.removeAttribute('href');
@@ -659,6 +692,7 @@ function renderDebug() {
   const events = debug?.events || [];
   els.debugLog.textContent = JSON.stringify({
     apiBase: API_BASE || 'local',
+    publishedPage: isPublishedPage(),
     preflight: state.preflight,
     job: state.job ? {
       id: state.job.id,
@@ -669,6 +703,19 @@ function renderDebug() {
     } : null,
     events
   }, null, 2);
+}
+
+function renderSubtitleControls() {
+  if (!els.subtitleFontName) return;
+  const style = state.subtitleStyle;
+  if (els.subtitleFontName.value !== style.fontName) els.subtitleFontName.value = style.fontName;
+  if (Number(els.subtitleFontSize.value) !== style.fontSize) els.subtitleFontSize.value = String(style.fontSize);
+  if (els.subtitleTextColor.value !== style.textColor) els.subtitleTextColor.value = style.textColor;
+  if (els.subtitleBackgroundColor.value !== style.backgroundColor) els.subtitleBackgroundColor.value = style.backgroundColor;
+  els.subtitlePreview.style.fontFamily = '"' + style.fontName.replace(/"/g, '') + '", Arial, sans-serif';
+  els.subtitlePreview.style.fontSize = Math.max(14, Math.min(36, Math.round(style.fontSize * 0.42))) + 'px';
+  els.subtitlePreview.style.color = style.textColor;
+  els.subtitlePreview.style.backgroundColor = style.backgroundColor;
 }
 
 function renderFinal() {
@@ -737,7 +784,43 @@ function setDownloadLink(link, kind, enabled) {
     link.removeAttribute('href');
     return;
   }
-  link.href = API_BASE + '/api/jobs/' + encodeURIComponent(state.job.id) + '/download?kind=' + encodeURIComponent(kind);
+  link.href = fileLink('/api/jobs/' + encodeURIComponent(state.job.id) + '/download?kind=' + encodeURIComponent(kind));
+}
+
+function updateSubtitleStyleFromInputs() {
+  state.subtitleStyle = {
+    fontName: cleanFontName(els.subtitleFontName.value, state.subtitleStyle.fontName),
+    fontSize: clamp(Number(els.subtitleFontSize.value), 16, 120, state.subtitleStyle.fontSize),
+    textColor: cleanColor(els.subtitleTextColor.value, state.subtitleStyle.textColor),
+    backgroundColor: cleanColor(els.subtitleBackgroundColor.value, state.subtitleStyle.backgroundColor)
+  };
+  renderSubtitleControls();
+}
+
+function applySubtitleDefaults(videoConfig = {}) {
+  if (!videoConfig || state.subtitleDefaultsApplied) return;
+  state.subtitleDefaultsApplied = true;
+  state.subtitleStyle = {
+    fontName: cleanFontName(videoConfig.subtitleFontName, state.subtitleStyle.fontName),
+    fontSize: clamp(Number(videoConfig.subtitleFontSize), 16, 120, state.subtitleStyle.fontSize),
+    textColor: cleanColor(videoConfig.subtitleTextColor, state.subtitleStyle.textColor),
+    backgroundColor: cleanColor(videoConfig.subtitleBackgroundColor, state.subtitleStyle.backgroundColor)
+  };
+  renderSubtitleControls();
+}
+
+function cleanFontName(value, fallback) {
+  const clean = String(value || '').replace(/[\r\n,]/g, ' ').replace(/\s+/g, ' ').trim();
+  return clean || fallback || 'Arial';
+}
+
+function cleanColor(value, fallback) {
+  const clean = String(value || '').trim().toLowerCase();
+  return /^#[0-9a-f]{6}$/.test(clean) ? clean : fallback;
+}
+
+function clamp(value, min, max, fallback) {
+  return Number.isFinite(value) ? Math.min(max, Math.max(min, Math.round(value))) : fallback;
 }
 
 function collectEditedScenes() {
@@ -1011,6 +1094,9 @@ function empty(target) {
 }
 
 async function api(path, options = {}) {
+  if (!API_BASE && isPublishedPage()) {
+    throw new Error('Falta configurar un backend HTTPS en Servidor');
+  }
   const { timeoutMs = 0, ...fetchOptions } = options;
   const controller = timeoutMs > 0 ? new AbortController() : null;
   const timeout = controller ? window.setTimeout(() => controller.abort(), timeoutMs) : null;
@@ -1031,6 +1117,43 @@ async function api(path, options = {}) {
   } finally {
     if (timeout) window.clearTimeout(timeout);
   }
+}
+
+function syncServerInput() {
+  els.apiBaseInput.value = API_BASE || '';
+}
+
+async function saveServerBase() {
+  const clean = els.apiBaseInput.value.trim().replace(/\/$/, '');
+  if (!clean) return clearServerBase();
+  localStorage.setItem('playgroundApiBase', clean);
+  API_BASE = clean;
+  await loadHealth();
+  await loadPreflight();
+  renderAll();
+}
+
+async function useLocalServerBase() {
+  const localBase = 'http://localhost:8787';
+  localStorage.setItem('playgroundApiBase', localBase);
+  API_BASE = localBase;
+  syncServerInput();
+  await loadHealth();
+  await loadPreflight();
+  renderAll();
+}
+
+async function clearServerBase() {
+  localStorage.removeItem('playgroundApiBase');
+  API_BASE = resolveApiBase();
+  syncServerInput();
+  await loadHealth();
+  await loadPreflight();
+  renderAll();
+}
+
+function isPublishedPage() {
+  return location.protocol === 'https:' && !['localhost', '127.0.0.1'].includes(location.hostname);
 }
 
 function readFileAsDataUrl(file) {

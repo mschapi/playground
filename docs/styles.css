@@ -54,6 +54,36 @@ button:disabled {
   margin: 0 auto 18px;
 }
 
+.topbar-actions {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.small-button {
+  min-height: 36px;
+}
+
+.server-panel {
+  max-width: 1500px;
+  margin: 0 auto 18px;
+  display: grid;
+  grid-template-columns: minmax(260px, 1fr) auto;
+  gap: 12px;
+  align-items: end;
+  background: var(--paper);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  box-shadow: var(--shadow);
+  padding: 12px;
+}
+
+.server-panel[hidden] {
+  display: none;
+}
+
 .eyebrow {
   margin: 0 0 4px;
   font-size: 12px;
@@ -783,4 +813,41 @@ button:focus-visible,
 .summary-total {
   color: var(--ink);
   font-weight: 850;
+}
+
+.subtitle-controls {
+  display: grid;
+  gap: 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fbfcfd;
+  padding: 10px;
+}
+
+.subtitle-preview {
+  justify-self: start;
+  max-width: 100%;
+  border-radius: 4px;
+  padding: 6px 12px;
+  font-weight: 750;
+  line-height: 1.15;
+  overflow-wrap: anywhere;
+}
+
+.color-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.color-input {
+  min-height: 40px;
+  padding: 4px;
+}
+
+@media (max-width: 760px) {
+  .server-panel,
+  .color-grid {
+    grid-template-columns: 1fr;
+  }
 }
