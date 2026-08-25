@@ -1,0 +1,191 @@
+name: Codex patch subtitle controls
+
+on:
+  push:
+    branches: ["main"]
+    paths:
+      - ".github/workflows/codex-patch-subtitle-controls.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Apply patch
+        shell: bash
+        run: |
+          cat > /tmp/codex_patch.py <<'PY'
+          from pathlib import Path
+
+          def read(path):
+              return Path(path).read_text(encoding='utf-8')
+
+          def write(path, text):
+              Path(path).write_text(text, encoding='utf-8')
+
+          def replace(path, old, new):
+              text = read(path)
+              if new in text:
+                  return
+              if old not in text:
+                  raise SystemExit(f'Missing expected block in {path}: {old[:80]!r}')
+              write(path, text.replace(old, new, 1))
+
+          def insert_before(path, marker, addition):
+              text = read(path)
+              if addition.strip() in text:
+                  return
+              if marker not in text:
+                  raise SystemExit(f'Missing marker in {path}: {marker!r}')
+              write(path, text.replace(marker, addition + marker, 1))
+
+          def insert_after(path, marker, addition):
+              text = read(path)
+              if addition.strip() in text:
+                  return
+              if marker not in text:
+                  raise SystemExit(f'Missing marker in {path}: {marker!r}')
+              write(path, text.replace(marker, marker + addition, 1))
+
+          replace('config/pipeline.config.json',
+              '    "subtitleFontSize": 52,\n    "subtitleMaxChars": 38,',
+              '    "subtitleFontSize": 52,\n    "subtitleTextColor": "#ffffff",\n    "subtitleBackgroundColor": "#c21824",\n    "subtitleMaxChars": 38,')
+
+          replace('src/config.js',
+              "      subtitleFontSize: numberEnv(\n        'VIDEO_SUBTITLE_FONT_SIZE',\n        base.video.subtitleFontSize\n      ),\n      subtitleFontsDir: env('VIDEO_SUBTITLE_FONTS_DIR', {",
+              "      subtitleFontSize: numberEnv(\n        'VIDEO_SUBTITLE_FONT_SIZE',\n        base.video.subtitleFontSize\n      ),\n      subtitleTextColor: env('VIDEO_SUBTITLE_TEXT_COLOR', {\n        defaultValue: base.video.subtitleTextColor || '#ffffff'\n      }),\n      subtitleBackgroundColor: env('VIDEO_SUBTITLE_BACKGROUND_COLOR', {\n        defaultValue: base.video.subtitleBackgroundColor || '#c21824'\n      }),\n      subtitleFontsDir: env('VIDEO_SUBTITLE_FONTS_DIR', {")
+
+          replace('src/video/ffmpeg.js',
+              "export function buildAssSubtitles(scenes, config) {\n  const events = [];",
+              "export function buildAssSubtitles(scenes, config) {\n  const events = [];\n  const primaryColour = assColor(\n    config.video.subtitleTextColor || config.video.subtitlePrimaryColour,\n    '&H00FFFFFF'\n  );\n  const backgroundColour = assColor(\n    config.video.subtitleBackgroundColor || config.video.subtitleBackColour,\n    '&H000000FF'\n  );")
+          replace('src/video/ffmpeg.js',
+              "    `Style: Default,${config.video.subtitleFontName},${config.video.subtitleFontSize},&H00FFFFFF,&H00FFFFFF,&H000000FF,&H000000FF,0,0,0,0,100,100,0,0,3,12,0,2,150,150,${config.video.subtitleMarginV},1`,",
+              "    `Style: Default,${assStyleText(config.video.subtitleFontName || 'Chakra Petch')},${config.video.subtitleFontSize},${primaryColour},${primaryColour},${backgroundColour},${backgroundColour},0,0,0,0,100,100,0,0,3,12,0,2,150,150,${config.video.subtitleMarginV},1`,")
+          insert_before('src/video/ffmpeg.js',
+              'async function assertFfmpeg(ffmpegPath) {',
+              "function assStyleText(value) {\n  return String(value || '')\n    .replace(/[\\r\\n,]/g, ' ')\n    .replace(/\\s+/g, ' ')\n    .trim() || 'Arial';\n}\n\nfunction assColor(value, fallback) {\n  const hex = String(value || '').trim().replace(/^#/, '');\n  if (!/^[0-9a-f]{6}$/i.test(hex)) {\n    if (/^&H[0-9a-f]{8}$/i.test(String(value || '').trim())) return String(value).trim();\n    return fallback;\n  }\n  const rr = hex.slice(0, 2);\n  const gg = hex.slice(2, 4);\n  const bb = hex.slice(4, 6);\n  return '&H00' + bb + gg + rr;\n}\n\n")
+
+          replace('src/server.js',
+              "  try {\n    const selections = body.selections || {};",
+              "  try {\n    const subtitleStyle = normalizeSubtitleStyle(body.subtitleStyle || {});\n    const renderConfig = withSubtitleStyle(config, subtitleStyle);\n    const selections = body.selections || {};")
+          replace('src/server.js',
+              "      subtitles: {\n        font: config.video.subtitleFontName,\n        size: config.video.subtitleFontSize,\n        foreground: config.video.subtitlePrimaryColour,\n        background: config.video.subtitleBackColour\n      }",
+              "      subtitles: subtitleStyle")
+          replace('src/server.js',
+              "      audioSceneFiles\n    });",
+              "      audioSceneFiles,\n      subtitleStyle\n    });")
+          replace('src/server.js',
+              "      sceneAudioPaths,\n      config,\n      outDir: join(job.jobDir, '06-selected-video'),",
+              "      sceneAudioPaths,\n      config: renderConfig,\n      outDir: join(job.jobDir, '06-selected-video'),")
+          insert_before('src/server.js',
+              'function normalizeSelectionPlan(job, selections) {',
+              "function normalizeSubtitleStyle(style = {}) {\n  return {\n    fontName: cleanSubtitleFont(style.fontName || style.font || config.video.subtitleFontName || 'Chakra Petch'),\n    fontSize: clampNumber(style.fontSize ?? style.size ?? config.video.subtitleFontSize, 16, 120, config.video.subtitleFontSize || 52),\n    textColor: cleanHexColor(style.textColor || style.foreground || config.video.subtitleTextColor || '#ffffff', '#ffffff'),\n    backgroundColor: cleanHexColor(style.backgroundColor || style.background || config.video.subtitleBackgroundColor || '#c21824', '#c21824')\n  };\n}\n\nfunction withSubtitleStyle(baseConfig, style) {\n  return {\n    ...baseConfig,\n    video: {\n      ...baseConfig.video,\n      subtitleFontName: style.fontName,\n      subtitleFontSize: style.fontSize,\n      subtitleTextColor: style.textColor,\n      subtitleBackgroundColor: style.backgroundColor\n    }\n  };\n}\n\nfunction cleanSubtitleFont(value) {\n  return String(value || '')\n    .replace(/[\\r\\n,]/g, ' ')\n    .replace(/\\s+/g, ' ')\n    .trim()\n    .slice(0, 80) || 'Arial';\n}\n\nfunction cleanHexColor(value, fallback) {\n  const clean = String(value || '').trim();\n  return /^#[0-9a-f]{6}$/i.test(clean) ? clean.toLowerCase() : fallback;\n}\n\nfunction clampNumber(value, min, max, fallback) {\n  const number = Number(value);\n  if (!Number.isFinite(number)) return fallback;\n  return Math.min(max, Math.max(min, Math.round(number)));\n}\n\n")
+          replace('src/server.js',
+              'function buildSelectionRecord({ job, selectionPlan, renderClips, audioMode, audioPath, sceneAudioPaths, audioSceneFiles }) {\n  return {\n    createdAt: new Date().toISOString(),\n    rawSelections: selectionPlan,\n    totalDurationSeconds: totalSceneDuration(job.scenes),',
+              'function buildSelectionRecord({ job, selectionPlan, renderClips, audioMode, audioPath, sceneAudioPaths, audioSceneFiles, subtitleStyle }) {\n  return {\n    createdAt: new Date().toISOString(),\n    rawSelections: selectionPlan,\n    totalDurationSeconds: totalSceneDuration(job.scenes),\n    subtitleStyle,')
+          replace('src/server.js',
+              "      subtitleFontName: config.video.subtitleFontName,\n      subtitleFontSize: config.video.subtitleFontSize\n    }",
+              "      subtitleFontName: config.video.subtitleFontName,\n      subtitleFontSize: config.video.subtitleFontSize,\n      subtitleTextColor: config.video.subtitleTextColor,\n      subtitleBackgroundColor: config.video.subtitleBackgroundColor\n    }")
+
+          replace('web/index.html',
+              '        <div class="status-pill" id="envStatus">Conectando</div>',
+              '        <div class="topbar-actions">\n          <button class="secondary small-button" id="serverButton">Servidor</button>\n          <div class="status-pill" id="envStatus">Conectando</div>\n        </div>')
+          insert_after('web/index.html',
+              '      </header>\n',
+              '\n      <section class="server-panel" id="serverPanel" hidden>\n        <label class="field-label">Backend\n          <input class="scene-input" id="apiBaseInput" placeholder="https://tu-backend.com" />\n        </label>\n        <div class="actions-row compact-actions">\n          <button class="secondary" id="localServerButton">Usar local</button>\n          <button class="secondary" id="clearServerButton">Limpiar</button>\n          <button class="primary" id="saveServerButton">Guardar</button>\n        </div>\n      </section>\n')
+          insert_after('web/index.html',
+              '                <div id="sceneAudioList" class="scene-audio-list" hidden></div>\n',
+              '                <div class="subtitle-controls">\n                  <div class="subtitle-preview" id="subtitlePreview">Subtitulo</div>\n                  <label class="field-label">Tipografia\n                    <input class="scene-input" id="subtitleFontName" list="subtitleFonts" />\n                    <datalist id="subtitleFonts">\n                      <option value="Chakra Petch"></option>\n                      <option value="Arial"></option>\n                      <option value="Inter"></option>\n                      <option value="Segoe UI"></option>\n                    </datalist>\n                  </label>\n                  <label class="field-label">Tamano\n                    <input class="scene-input" id="subtitleFontSize" type="number" min="16" max="120" step="1" />\n                  </label>\n                  <div class="color-grid">\n                    <label class="field-label">Letra\n                      <input class="scene-input color-input" id="subtitleTextColor" type="color" />\n                    </label>\n                    <label class="field-label">Fondo\n                      <input class="scene-input color-input" id="subtitleBackgroundColor" type="color" />\n                    </label>\n                  </div>\n                </div>\n')
+
+          replace('web/app.js',
+              "  audioMode: 'full',\n  sceneAudios: {},",
+              "  audioMode: 'full',\n  sceneAudios: {},\n  subtitleStyle: {\n    fontName: 'Chakra Petch',\n    fontSize: 52,\n    textColor: '#ffffff',\n    backgroundColor: '#c21824'\n  },")
+          replace('web/app.js',
+              "  envStatus: document.querySelector('#envStatus'),",
+              "  envStatus: document.querySelector('#envStatus'),\n  serverButton: document.querySelector('#serverButton'),\n  serverPanel: document.querySelector('#serverPanel'),\n  apiBaseInput: document.querySelector('#apiBaseInput'),\n  saveServerButton: document.querySelector('#saveServerButton'),\n  localServerButton: document.querySelector('#localServerButton'),\n  clearServerButton: document.querySelector('#clearServerButton'),")
+          replace('web/app.js',
+              "  sceneAudioList: document.querySelector('#sceneAudioList'),",
+              "  sceneAudioList: document.querySelector('#sceneAudioList'),\n  subtitlePreview: document.querySelector('#subtitlePreview'),\n  subtitleFontName: document.querySelector('#subtitleFontName'),\n  subtitleFontSize: document.querySelector('#subtitleFontSize'),\n  subtitleTextColor: document.querySelector('#subtitleTextColor'),\n  subtitleBackgroundColor: document.querySelector('#subtitleBackgroundColor'),")
+          insert_after('web/app.js',
+              "  els.sampleButton.addEventListener('click', () => {\n    els.scriptInput.value = sampleScript;\n  });\n",
+              "\n  els.serverButton.addEventListener('click', () => {\n    els.serverPanel.hidden = !els.serverPanel.hidden;\n    syncServerInput();\n  });\n  els.saveServerButton.addEventListener('click', saveServerBase);\n  els.localServerButton.addEventListener('click', useLocalServerBase);\n  els.clearServerButton.addEventListener('click', clearServerBase);\n")
+          insert_after('web/app.js',
+              "  els.audioInput.addEventListener('change', handleAudio);\n",
+              "  [els.subtitleFontName, els.subtitleFontSize, els.subtitleTextColor, els.subtitleBackgroundColor].forEach((input) => {\n    input.addEventListener('input', updateSubtitleStyleFromInputs);\n  });\n")
+          replace('web/app.js',
+              "    els.envStatus.textContent = 'Sin backend';\n    els.envStatus.className = 'status-pill warn';",
+              "    els.envStatus.textContent = isPublishedPage() ? 'Sin backend publico' : 'Sin backend';\n    els.envStatus.className = 'status-pill warn';\n    els.serverPanel.hidden = false;\n    syncServerInput();")
+          insert_after('web/app.js',
+              "    if (!state.imageStylePrompt && state.preflight?.config?.imageStylePrompt) {\n      state.imageStylePrompt = state.preflight.config.imageStylePrompt;\n    }\n",
+              "    applySubtitleDefaults(state.preflight?.config?.video);\n")
+          replace('web/app.js',
+              "        audioMode: state.audioMode,\n        audio: state.audioMode === 'full' ? state.audio : null,\n        sceneAudios: state.audioMode === 'scenes' ? state.sceneAudios : {}",
+              "        audioMode: state.audioMode,\n        audio: state.audioMode === 'full' ? state.audio : null,\n        sceneAudios: state.audioMode === 'scenes' ? state.sceneAudios : {},\n        subtitleStyle: state.subtitleStyle")
+          insert_after('web/app.js',
+              "  renderSelectedSummary();\n  renderAudioControls();\n",
+              "  renderSubtitleControls();\n")
+          replace('web/app.js',
+              "    els.debugDownload.href = API_BASE + debug.logUrl;",
+              "    els.debugDownload.href = fileLink(debug.logUrl);")
+          replace('web/app.js',
+              "    apiBase: API_BASE || 'local',\n    preflight: state.preflight,",
+              "    apiBase: API_BASE || 'local',\n    publishedPage: isPublishedPage(),\n    preflight: state.preflight,")
+          insert_before('web/app.js',
+              'function renderFinal() {',
+              "function renderSubtitleControls() {\n  if (!els.subtitleFontName) return;\n  const style = state.subtitleStyle;\n  if (els.subtitleFontName.value !== style.fontName) els.subtitleFontName.value = style.fontName;\n  if (Number(els.subtitleFontSize.value) !== style.fontSize) els.subtitleFontSize.value = String(style.fontSize);\n  if (els.subtitleTextColor.value !== style.textColor) els.subtitleTextColor.value = style.textColor;\n  if (els.subtitleBackgroundColor.value !== style.backgroundColor) els.subtitleBackgroundColor.value = style.backgroundColor;\n  els.subtitlePreview.style.fontFamily = '\"' + style.fontName.replace(/\"/g, '') + '\", Arial, sans-serif';\n  els.subtitlePreview.style.fontSize = Math.max(14, Math.min(36, Math.round(style.fontSize * 0.42))) + 'px';\n  els.subtitlePreview.style.color = style.textColor;\n  els.subtitlePreview.style.backgroundColor = style.backgroundColor;\n}\n\n")
+          replace('web/app.js',
+              "  link.href = API_BASE + '/api/jobs/' + encodeURIComponent(state.job.id) + '/download?kind=' + encodeURIComponent(kind);",
+              "  link.href = fileLink('/api/jobs/' + encodeURIComponent(state.job.id) + '/download?kind=' + encodeURIComponent(kind));")
+          insert_before('web/app.js',
+              'function collectEditedScenes() {',
+              "function updateSubtitleStyleFromInputs() {\n  state.subtitleStyle = {\n    fontName: cleanFontName(els.subtitleFontName.value, state.subtitleStyle.fontName),\n    fontSize: clamp(Number(els.subtitleFontSize.value), 16, 120, state.subtitleStyle.fontSize),\n    textColor: cleanColor(els.subtitleTextColor.value, state.subtitleStyle.textColor),\n    backgroundColor: cleanColor(els.subtitleBackgroundColor.value, state.subtitleStyle.backgroundColor)\n  };\n  renderSubtitleControls();\n}\n\nfunction applySubtitleDefaults(videoConfig = {}) {\n  if (!videoConfig || state.subtitleDefaultsApplied) return;\n  state.subtitleDefaultsApplied = true;\n  state.subtitleStyle = {\n    fontName: cleanFontName(videoConfig.subtitleFontName, state.subtitleStyle.fontName),\n    fontSize: clamp(Number(videoConfig.subtitleFontSize), 16, 120, state.subtitleStyle.fontSize),\n    textColor: cleanColor(videoConfig.subtitleTextColor, state.subtitleStyle.textColor),\n    backgroundColor: cleanColor(videoConfig.subtitleBackgroundColor, state.subtitleStyle.backgroundColor)\n  };\n  renderSubtitleControls();\n}\n\nfunction cleanFontName(value, fallback) {\n  const clean = String(value || '').replace(/[\\r\\n,]/g, ' ').replace(/\\s+/g, ' ').trim();\n  return clean || fallback || 'Arial';\n}\n\nfunction cleanColor(value, fallback) {\n  const clean = String(value || '').trim().toLowerCase();\n  return /^#[0-9a-f]{6}$/.test(clean) ? clean : fallback;\n}\n\nfunction clamp(value, min, max, fallback) {\n  return Number.isFinite(value) ? Math.min(max, Math.max(min, Math.round(value))) : fallback;\n}\n\n")
+          replace('web/app.js',
+              "async function api(path, options = {}) {\n  const { timeoutMs, ...fetchOptions } = options;",
+              "async function api(path, options = {}) {\n  if (!API_BASE && isPublishedPage()) {\n    throw new Error('Falta configurar un backend HTTPS en Servidor');\n  }\n  const { timeoutMs, ...fetchOptions } = options;")
+          insert_before('web/app.js',
+              'function readFileAsDataUrl(file) {',
+              "function syncServerInput() {\n  els.apiBaseInput.value = API_BASE || '';\n}\n\nasync function saveServerBase() {\n  const clean = els.apiBaseInput.value.trim().replace(/\\/$/, '');\n  if (!clean) return clearServerBase();\n  localStorage.setItem('playgroundApiBase', clean);\n  API_BASE = clean;\n  await loadHealth();\n  await loadPreflight();\n  renderAll();\n}\n\nasync function useLocalServerBase() {\n  const localBase = 'http://localhost:8787';\n  localStorage.setItem('playgroundApiBase', localBase);\n  API_BASE = localBase;\n  syncServerInput();\n  await loadHealth();\n  await loadPreflight();\n  renderAll();\n}\n\nasync function clearServerBase() {\n  localStorage.removeItem('playgroundApiBase');\n  API_BASE = resolveApiBase();\n  syncServerInput();\n  await loadHealth();\n  await loadPreflight();\n  renderAll();\n}\n\nfunction isPublishedPage() {\n  return location.protocol === 'https:' && !['localhost', '127.0.0.1'].includes(location.hostname);\n}\n\n")
+
+          insert_after('web/styles.css',
+              ".topbar {\n  display: flex;\n  align-items: center;\n  justify-content: space-between;\n  gap: 16px;\n  max-width: 1500px;\n  margin: 0 auto 18px;\n}\n",
+              "\n.topbar-actions {\n  display: inline-flex;\n  align-items: center;\n  justify-content: flex-end;\n  gap: 10px;\n  flex-wrap: wrap;\n}\n\n.small-button {\n  min-height: 36px;\n}\n\n.server-panel {\n  max-width: 1500px;\n  margin: 0 auto 18px;\n  display: grid;\n  grid-template-columns: minmax(260px, 1fr) auto;\n  gap: 12px;\n  align-items: end;\n  background: var(--paper);\n  border: 1px solid var(--line);\n  border-radius: 8px;\n  box-shadow: var(--shadow);\n  padding: 12px;\n}\n\n.server-panel[hidden] {\n  display: none;\n}\n")
+          insert_after('web/styles.css',
+              ".summary-total {\n  color: var(--ink);\n  font-weight: 850;\n}\n",
+              "\n.subtitle-controls {\n  display: grid;\n  gap: 10px;\n  border: 1px solid var(--line);\n  border-radius: 8px;\n  background: #fbfcfd;\n  padding: 10px;\n}\n\n.subtitle-preview {\n  justify-self: start;\n  max-width: 100%;\n  border-radius: 4px;\n  padding: 6px 12px;\n  font-weight: 750;\n  line-height: 1.15;\n  overflow-wrap: anywhere;\n}\n\n.color-grid {\n  display: grid;\n  grid-template-columns: 1fr 1fr;\n  gap: 8px;\n}\n\n.color-input {\n  min-height: 40px;\n  padding: 4px;\n}\n\n@media (max-width: 760px) {\n  .server-panel,\n  .color-grid {\n    grid-template-columns: 1fr;\n  }\n}\n")
+
+          replace('.env.example',
+              'VIDEO_SUBTITLE_FONT_NAME=Chakra Petch\nVIDEO_SUBTITLE_FONT_SIZE=52\n',
+              'VIDEO_SUBTITLE_FONT_NAME=Chakra Petch\nVIDEO_SUBTITLE_FONT_SIZE=52\nVIDEO_SUBTITLE_TEXT_COLOR=#ffffff\nVIDEO_SUBTITLE_BACKGROUND_COLOR=#c21824\n')
+
+          text = read('README.md')
+          if 'Ajustas subtitulos si queres' not in text:
+              text = text.replace('11. Tocas `Renderizar video`.\n12. Previsualizas y descargas el video terminado.', '11. Ajustas subtitulos si queres: tipografia, tamano, color de letra y fondo.\n12. Tocas `Renderizar video`.\n13. Previsualizas y descargas el video terminado.')
+          if 'backend con APIs debe correr en un server HTTPS publico' not in text:
+              text = text.replace('La carpeta `web/` puede publicarse como GitHub Pages, pero el backend con APIs debe correr en tu maquina o en un server. En GitHub Pages la UI apunta por defecto a `http://localhost:8787`; por eso antes de usar `https://mschapi.github.io/playground/` tenes que ejecutar localmente:', 'La carpeta `web/` puede publicarse como GitHub Pages, pero el backend con APIs debe correr en un server HTTPS publico para que lo usen otras personas. GitHub Pages solo sirve archivos estaticos: no puede ejecutar OpenAI, Pexels, Bright Data, FFmpeg ni guardar jobs.\n\nPara probar en tu maquina:')
+              text = text.replace('Si el backend corre en otro dominio, abri la consola del navegador y defini:\n\n```js\nlocalStorage.setItem(\'playgroundApiBase\', \'https://tu-backend.com\')\n```', 'Y abri `http://localhost:8787`.\n\nPara usar `https://mschapi.github.io/playground/` desde otra computadora, desplega `src/server.js` en un backend publico y cargalo desde el boton `Servidor`, o abri la URL asi:\n\n```txt\nhttps://mschapi.github.io/playground/?apiBase=https://tu-backend.com\n```')
+          if 'VIDEO_SUBTITLE_TEXT_COLOR=#ffffff' not in text:
+              text = text.replace('- `VIDEO_SUBTITLE_FONT_SIZE=52`', '- `VIDEO_SUBTITLE_FONT_SIZE=52`\n- `VIDEO_SUBTITLE_TEXT_COLOR=#ffffff`\n- `VIDEO_SUBTITLE_BACKGROUND_COLOR=#c21824`')
+          if 'En una pagina publicada, usa el boton `Servidor`' not in text:
+              text = text.replace('En una pagina publicada, la UI intenta usar `http://localhost:8787` por defecto. Para un backend real:\n\n```js\nlocalStorage.setItem(\'playgroundApiBase\', \'https://tu-backend.com\')\n```', 'En una pagina publicada, usa el boton `Servidor` para guardar el backend publico. Tambien podes pasarlo por query string:\n\n```txt\nhttps://mschapi.github.io/playground/?apiBase=https://tu-backend.com\n```')
+          write('README.md', text)
+          PY
+          python /tmp/codex_patch.py
+      - name: Check syntax
+        shell: bash
+        run: |
+          node --check src/server.js
+          node --check src/video/ffmpeg.js
+          node --check src/config.js
+          node --check web/app.js
+      - name: Commit patch
+        shell: bash
+        run: |
+          git config user.name "mschapi"
+          git config user.email "martin.schapiro@neural-plug.com"
+          git add .env.example README.md config/pipeline.config.json src/config.js src/video/ffmpeg.js src/server.js web/index.html web/app.js web/styles.css
+          git commit -m "Add backend selector and subtitle styling controls"
+          git push
