@@ -263,6 +263,14 @@ function buildConcatFile(scenes, aiImages) {
 
 export function buildAssSubtitles(scenes, config) {
   const events = [];
+  const primaryColour = assColor(
+    config.video.subtitleTextColor || config.video.subtitlePrimaryColour,
+    '&H00FFFFFF'
+  );
+  const backgroundColour = assColor(
+    config.video.subtitleBackgroundColor || config.video.subtitleBackColour,
+    '&H000000FF'
+  );
   let cursor = 0;
   for (const scene of scenes) {
     const chunks = chunkWords(
@@ -291,13 +299,32 @@ export function buildAssSubtitles(scenes, config) {
     '',
     '[V4+ Styles]',
     'Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding',
-    `Style: Default,${config.video.subtitleFontName},${config.video.subtitleFontSize},&H00FFFFFF,&H00FFFFFF,&H000000FF,&H000000FF,0,0,0,0,100,100,0,0,3,12,0,2,150,150,${config.video.subtitleMarginV},1`,
+    `Style: Default,${assStyleText(config.video.subtitleFontName || 'Chakra Petch')},${config.video.subtitleFontSize},${primaryColour},${primaryColour},${backgroundColour},${backgroundColour},0,0,0,0,100,100,0,0,3,12,0,2,150,150,${config.video.subtitleMarginV},1`,
     '',
     '[Events]',
     'Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text',
     ...events,
     ''
   ].join('\n');
+}
+
+function assStyleText(value) {
+  return String(value || '')
+    .replace(/[\r\n,]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim() || 'Arial';
+}
+
+function assColor(value, fallback) {
+  const hex = String(value || '').trim().replace(/^#/, '');
+  if (!/^[0-9a-f]{6}$/i.test(hex)) {
+    if (/^&H[0-9a-f]{8}$/i.test(String(value || '').trim())) return String(value).trim();
+    return fallback;
+  }
+  const rr = hex.slice(0, 2);
+  const gg = hex.slice(2, 4);
+  const bb = hex.slice(4, 6);
+  return '&H00' + bb + gg + rr;
 }
 
 async function assertFfmpeg(ffmpegPath) {

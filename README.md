@@ -64,8 +64,9 @@ Flujo:
 8. Elegis una opcion por escena con un click. En modo `Multiple`, podes elegir mas de un asset por escena y el tiempo se reparte automaticamente.
 9. Si elegis un video, podes definir desde que segundo empieza el recorte.
 10. Subis un audio opcional.
-11. Tocas `Renderizar video`.
-12. Previsualizas y descargas el video terminado.
+11. Ajustas subtitulos si queres: tipografia, tamano, color de letra y fondo.
+12. Tocas `Renderizar video`.
+13. Previsualizas y descargas el video terminado.
 
 Si faltan API keys, la app se abre en `Prueba`, que genera placeholders sin gastar APIs. Para una corrida real desactiva `Prueba` y completa `keys.txt` o `.env`.
 
@@ -94,16 +95,20 @@ En esos casos el codigo ya llego a Bright Data. Hay que activar billing/SERP en 
 
 ## Publicar en GitHub Pages
 
-La carpeta `web/` puede publicarse como GitHub Pages, pero el backend con APIs debe correr en tu maquina o en un server. En GitHub Pages la UI apunta por defecto a `http://localhost:8787`; por eso antes de usar `https://mschapi.github.io/playground/` tenes que ejecutar localmente:
+La carpeta `web/` puede publicarse como GitHub Pages, pero el backend con APIs debe correr en un server HTTPS publico para que lo usen otras personas. GitHub Pages solo sirve archivos estaticos: no puede ejecutar OpenAI, Pexels, Bright Data, FFmpeg ni guardar jobs.
+
+Para probar en tu maquina:
 
 ```bash
 node src/server.js
 ```
 
-Si el backend corre en otro dominio, abri la consola del navegador y defini:
+Y abri `http://localhost:8787`.
 
-```js
-localStorage.setItem('playgroundApiBase', 'https://tu-backend.com')
+Para usar `https://mschapi.github.io/playground/` desde otra computadora, desplega `src/server.js` en un backend publico y cargalo desde el boton `Servidor`, o abri la URL asi:
+
+```txt
+https://mschapi.github.io/playground/?apiBase=https://tu-backend.com
 ```
 
 ## Uso local
@@ -191,10 +196,10 @@ En local:
 node src/server.js
 ```
 
-En una pagina publicada, la UI intenta usar `http://localhost:8787` por defecto. Para un backend real:
+En una pagina publicada, usa el boton `Servidor` para guardar el backend publico. Tambien podes pasarlo por query string:
 
-```js
-localStorage.setItem('playgroundApiBase', 'https://tu-backend.com')
+```txt
+https://mschapi.github.io/playground/?apiBase=https://tu-backend.com
 ```
 
 ## GitHub Actions

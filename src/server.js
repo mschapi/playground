@@ -247,6 +247,8 @@ async function startRender(job, body) {
   updateJob(job, { status: 'rendering', phase: 'Renderizando video', progress: 100, error: null });
 
   try {
+    const subtitleStyle = normalizeSubtitleStyle(body.subtitleStyle || {});
+    const renderConfig = withSubtitleStyle(config, subtitleStyle);
     const selections = body.selections || {};
     const selectionPlan = normalizeSelectionPlan(job, selections);
     const renderClips = buildRenderClips(job, selectionPlan);
@@ -265,12 +267,7 @@ async function startRender(job, body) {
       hasAudio: Boolean(body.audio?.dataBase64),
       sceneAudioCount: Object.values(body.sceneAudios || {}).filter((item) => item?.dataBase64).length,
       ffmpegPath: config.video.ffmpegPath,
-      subtitles: {
-        font: config.video.subtitleFontName,
-        size: config.video.subtitleFontSize,
-        foreground: config.video.subtitlePrimaryColour,
-        background: config.video.subtitleBackColour
-      }
+      subtitles: subtitleStyle
     });
 
     const audioMode = body.audioMode === 'scenes' ? 'scenes' : 'full';
@@ -303,7 +300,8 @@ async function startRender(job, body) {
       audioMode,
       audioPath,
       sceneAudioPaths,
-      audioSceneFiles
+      audioSceneFiles,
+      subtitleStyle
     });
     writeJson(join(job.jobDir, '06-selected-video', 'selection-plan.json'), selectionRecord);
 
@@ -313,7 +311,7 @@ async function startRender(job, body) {
       selectedClips: renderClips,
       audioPath,
       sceneAudioPaths,
-      config,
+      config: renderConfig,
       outDir: join(job.jobDir, '06-selected-video'),
       dryRun: job.dryRun
     });
@@ -356,6 +354,47 @@ async function startRender(job, body) {
     debugEvent(job, 'render', 'error', { message: error.message, stack: error.stack });
     throw error;
   }
+}
+
+function normalizeSubtitleStyle(style = {}) {
+  return {
+    fontName: cleanSubtitleFont(style.fontName || style.font || config.video.subtitleFontName || 'Chakra Petch'),
+    fontSize: clampNumber(style.fontSize ?? style.size ?? config.video.subtitleFontSize, 16, 120, config.video.subtitleFontSize || 52),
+    textColor: cleanHexColor(style.textColor || style.foreground || config.video.subtitleTextColor || '#ffffff', '#ffffff'),
+    backgroundColor: cleanHexColor(style.backgroundColor || style.background || config.video.subtitleBackgroundColor || '#c21824', '#c21824')
+  };
+}
+
+function withSubtitleStyle(baseConfig, style) {
+  return {
+    ...baseConfig,
+    video: {
+      ...baseConfig.video,
+      subtitleFontName: style.fontName,
+      subtitleFontSize: style.fontSize,
+      subtitleTextColor: style.textColor,
+      subtitleBackgroundColor: style.backgroundColor
+    }
+  };
+}
+
+function cleanSubtitleFont(value) {
+  return String(value || '')
+    .replace(/[\r\n,]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, 80) || 'Arial';
+}
+
+function cleanHexColor(value, fallback) {
+  const clean = String(value || '').trim();
+  return /^#[0-9a-f]{6}$/i.test(clean) ? clean.toLowerCase() : fallback;
+}
+
+function clampNumber(value, min, max, fallback) {
+  const number = Number(value);
+  if (!Number.isFinite(number)) return fallback;
+  return Math.min(max, Math.max(min, Math.round(number)));
 }
 
 function normalizeSelectionPlan(job, selections) {
@@ -745,11 +784,12 @@ async function splitFullAudioByScenes(job, audioPath) {
   }
 }
 
-function buildSelectionRecord({ job, selectionPlan, renderClips, audioMode, audioPath, sceneAudioPaths, audioSceneFiles }) {
+function buildSelectionRecord({ job, selectionPlan, renderClips, audioMode, audioPath, sceneAudioPaths, audioSceneFiles, subtitleStyle }) {
   return {
     createdAt: new Date().toISOString(),
     rawSelections: selectionPlan,
     totalDurationSeconds: totalSceneDuration(job.scenes),
+    subtitleStyle,
     scenes: (job.scenes || []).map((scene) => ({
       scene_id: scene.scene_id,
       scene_label: scene.scene_label,
@@ -1221,7 +1261,9 @@ function safeConfigSummary() {
       enabled: config.video.enabled,
       ffmpegPath: config.video.ffmpegPath,
       subtitleFontName: config.video.subtitleFontName,
-      subtitleFontSize: config.video.subtitleFontSize
+      subtitleFontSize: config.video.subtitleFontSize,
+      subtitleTextColor: config.video.subtitleTextColor,
+      subtitleBackgroundColor: config.video.subtitleBackgroundColor
     }
   };
 }

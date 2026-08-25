@@ -13,8 +13,22 @@
           <p class="eyebrow">Pipeline audiovisual</p>
           <h1>Playground de guiones</h1>
         </div>
-        <div class="status-pill" id="envStatus">Conectando</div>
+        <div class="topbar-actions">
+          <button class="secondary small-button" id="serverButton">Servidor</button>
+          <div class="status-pill" id="envStatus">Conectando</div>
+        </div>
       </header>
+
+      <section class="server-panel" id="serverPanel" hidden>
+        <label class="field-label">Backend
+          <input class="scene-input" id="apiBaseInput" placeholder="https://tu-backend.com" />
+        </label>
+        <div class="actions-row compact-actions">
+          <button class="secondary" id="localServerButton">Usar local</button>
+          <button class="secondary" id="clearServerButton">Limpiar</button>
+          <button class="primary" id="saveServerButton">Guardar</button>
+        </div>
+      </section>
 
       <section class="workspace">
         <aside class="script-panel">
@@ -125,6 +139,29 @@
                   <input id="audioInput" type="file" accept="audio/*" />
                 </label>
                 <div id="sceneAudioList" class="scene-audio-list" hidden></div>
+                <div class="subtitle-controls">
+                  <div class="subtitle-preview" id="subtitlePreview">Subtitulo</div>
+                  <label class="field-label">Tipografia
+                    <input class="scene-input" id="subtitleFontName" list="subtitleFonts" />
+                    <datalist id="subtitleFonts">
+                      <option value="Chakra Petch"></option>
+                      <option value="Arial"></option>
+                      <option value="Inter"></option>
+                      <option value="Segoe UI"></option>
+                    </datalist>
+                  </label>
+                  <label class="field-label">Tamano
+                    <input class="scene-input" id="subtitleFontSize" type="number" min="16" max="120" step="1" />
+                  </label>
+                  <div class="color-grid">
+                    <label class="field-label">Letra
+                      <input class="scene-input color-input" id="subtitleTextColor" type="color" />
+                    </label>
+                    <label class="field-label">Fondo
+                      <input class="scene-input color-input" id="subtitleBackgroundColor" type="color" />
+                    </label>
+                  </div>
+                </div>
                 <button class="primary" id="renderButton" disabled>Renderizar video</button>
                 <a class="secondary download-link" id="downloadSelected" href="#" download hidden>Descargar seleccion</a>
                 <div id="selectedSummary" class="selected-summary"></div>

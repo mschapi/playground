@@ -123,6 +123,12 @@ export function loadConfig(configPath = 'config/pipeline.config.json') {
         'VIDEO_SUBTITLE_FONT_SIZE',
         base.video.subtitleFontSize
       ),
+      subtitleTextColor: env('VIDEO_SUBTITLE_TEXT_COLOR', {
+        defaultValue: base.video.subtitleTextColor || '#ffffff'
+      }),
+      subtitleBackgroundColor: env('VIDEO_SUBTITLE_BACKGROUND_COLOR', {
+        defaultValue: base.video.subtitleBackgroundColor || '#c21824'
+      }),
       subtitleFontsDir: env('VIDEO_SUBTITLE_FONTS_DIR', {
         defaultValue: defaultSubtitleFontsDir()
       })

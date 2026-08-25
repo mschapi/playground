@@ -56,6 +56,8 @@
     "enabled": true,
     "subtitleFontName": "Chakra Petch",
     "subtitleFontSize": 52,
+    "subtitleTextColor": "#ffffff",
+    "subtitleBackgroundColor": "#c21824",
     "subtitleMaxChars": 38,
     "subtitleMaxWords": 8,
     "subtitleMarginV": 95,
