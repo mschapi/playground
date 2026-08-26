@@ -78,7 +78,7 @@ export function env(name, options = {}) {
 export function boolEnv(name, defaultValue = false) {
   const value = env(name);
   if (value === undefined) return defaultValue;
-  return ['1', 'true', 'yes', 'y', 'si', 'sí'].includes(value.toLowerCase());
+  return ['1', 'true', 'yes', 'y', 'si'].includes(value.toLowerCase());
 }
 
 export function numberEnv(name, defaultValue) {
@@ -88,3 +88,4 @@ export function numberEnv(name, defaultValue) {
   if (Number.isNaN(parsed)) throw new Error(name + ' debe ser numerico');
   return parsed;
 }
+
