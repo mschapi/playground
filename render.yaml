@@ -13,6 +13,10 @@ services:
         value: /tmp/playground-jobs
       - key: FFMPEG_PATH
         value: ffmpeg
+      - key: VIDEO_FFMPEG_PRESET
+        value: ultrafast
+      - key: VIDEO_FFMPEG_CRF
+        value: 24
       - key: CORS_ORIGIN
         value: https://mschapi.github.io
       - key: DRIVE_UPLOAD
