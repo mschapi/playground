@@ -35,7 +35,7 @@ export async function renderAiStoryboardVideo({ scenes, aiImages, config, outDir
     assFilter(subtitlePath, config)
   ].join(',');
 
-  await execFileAsync(config.video.ffmpegPath, [
+  await runFfmpeg(config, [
     '-y',
     '-f',
     'concat',
@@ -119,7 +119,7 @@ export async function renderSelectedStoryboardVideo({ scenes, selectedAssets, se
       ? ['-map', '0:v:0', '-map', '1:a:0', '-shortest', '-c:a', 'aac', '-ar', '44100', '-ac', '2']
       : ['-an'];
 
-    await execFileAsync(config.video.ffmpegPath, [
+    await runFfmpeg(config, [
       '-y',
       ...inputArgs,
       ...audioInputArgs,
@@ -146,7 +146,7 @@ export async function renderSelectedStoryboardVideo({ scenes, selectedAssets, se
     segmentPaths.map((segmentPath) => "file '" + concatPathEscape(segmentPath) + "'").join('\n') + '\n'
   );
 
-  await execFileAsync(config.video.ffmpegPath, [
+  await runFfmpeg(config, [
     '-y',
     '-f',
     'concat',
@@ -214,7 +214,7 @@ export async function renderSelectedStoryboardVideo({ scenes, selectedAssets, se
           outputPath
         ];
 
-  await execFileAsync(config.video.ffmpegPath, args);
+  await runFfmpeg(config, args);
 
   return {
     path: outputPath,
@@ -330,6 +330,19 @@ async function assertFfmpeg(ffmpegPath) {
       `No encontre FFmpeg (${ffmpegPath}). Instala ffmpeg o define FFMPEG_PATH.`
     );
   }
+}
+
+async function runFfmpeg(config, args) {
+  const timeoutSeconds = Math.max(30, Number(config.video.ffmpegTimeoutSeconds || 600));
+  await execFileAsync(
+    config.video.ffmpegPath,
+    ['-nostdin', '-hide_banner', '-loglevel', 'error', ...args],
+    {
+      timeout: timeoutSeconds * 1000,
+      maxBuffer: 4 * 1024 * 1024,
+      windowsHide: true
+    }
+  );
 }
 
 function videoCodecArgs(config) {
