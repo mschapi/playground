@@ -22,7 +22,7 @@ import {
   writeJson,
   writeText
 } from './utils/files.js';
-import { env, numberEnv } from './utils/env.js';
+import { boolEnv, env, numberEnv } from './utils/env.js';
 
 const ROOT = resolve('.');
 const WEB_ROOT = resolve('web');
@@ -31,6 +31,7 @@ const PORT = Number(process.env.PORT || 8787);
 const HOST = process.env.HOST || '0.0.0.0';
 const serverSettings = loadServerSettings();
 const jobs = new Map();
+const publicUsage = new Map();
 const execFileAsync = promisify(execFile);
 
 const server = createServer(async (request, response) => {
@@ -43,6 +44,11 @@ const server = createServer(async (request, response) => {
   try {
     if (isProtectedApiRequest(request) && !isAuthorized(request)) {
       return sendJson(response, 401, { error: 'Backend protegido: configura el token en Servidor' });
+    }
+    const rateLimit = checkPublicRateLimit(request);
+    if (rateLimit) {
+      response.setHeader('Retry-After', String(rateLimit.retryAfterSeconds));
+      return sendJson(response, 429, { error: rateLimit.message });
     }
     await route(request, response);
   } catch (error) {
@@ -64,8 +70,16 @@ function loadServerSettings() {
     sceneJsonLimitBytes: megabytesEnv('MAX_SCENE_JSON_MB', 20),
     assetRequestJsonLimitBytes: megabytesEnv('MAX_ASSET_REQUEST_JSON_MB', 4),
     uploadJsonLimitBytes: megabytesEnv('MAX_UPLOAD_JSON_MB', 80),
-    renderJsonLimitBytes: megabytesEnv('MAX_RENDER_JSON_MB', 300)
+    renderJsonLimitBytes: megabytesEnv('MAX_RENDER_JSON_MB', 300),
+    publicRateLimit: boolEnv('PUBLIC_RATE_LIMIT', true),
+    publicMaxJobsPerHour: positiveWholeEnv('PUBLIC_MAX_JOBS_PER_HOUR', 3),
+    publicMaxActionsPerMinute: positiveWholeEnv('PUBLIC_MAX_ACTIONS_PER_MINUTE', 60),
+    publicMaxConcurrentOperations: positiveWholeEnv('PUBLIC_MAX_CONCURRENT_OPERATIONS', 2)
   };
+}
+
+function positiveWholeEnv(name, fallback) {
+  return Math.max(1, Math.floor(numberEnv(name, fallback)));
 }
 
 function megabytesEnv(name, fallback) {
@@ -95,6 +109,82 @@ function readAccessToken(request) {
   return String(bearer || request.headers['x-pipeline-token'] || '').trim();
 }
 
+function checkPublicRateLimit(request) {
+  if (serverSettings.accessToken || !serverSettings.publicRateLimit) return null;
+
+  const url = new URL(request.url, 'http://localhost:' + PORT);
+  if (!url.pathname.startsWith('/api/') || !['POST', 'PATCH'].includes(request.method)) return null;
+
+  const now = Date.now();
+  const clientId = clientAddress(request);
+  const usage = publicUsage.get(clientId) || {
+    minuteStartedAt: now,
+    hourStartedAt: now,
+    actionsThisMinute: 0,
+    jobsThisHour: 0,
+    lastSeenAt: now
+  };
+
+  if (now - usage.minuteStartedAt >= 60_000) {
+    usage.minuteStartedAt = now;
+    usage.actionsThisMinute = 0;
+  }
+  if (now - usage.hourStartedAt >= 3_600_000) {
+    usage.hourStartedAt = now;
+    usage.jobsThisHour = 0;
+  }
+
+  usage.actionsThisMinute += 1;
+  usage.lastSeenAt = now;
+  publicUsage.set(clientId, usage);
+  prunePublicUsage(now);
+
+  if (usage.actionsThisMinute > serverSettings.publicMaxActionsPerMinute) {
+    return {
+      message: 'Demasiadas acciones seguidas. Espera un minuto y volve a intentar.',
+      retryAfterSeconds: Math.max(1, Math.ceil((usage.minuteStartedAt + 60_000 - now) / 1000))
+    };
+  }
+
+  const createsJob = request.method === 'POST' && url.pathname === '/api/jobs';
+  if (createsJob) {
+    usage.jobsThisHour += 1;
+    if (usage.jobsThisHour > serverSettings.publicMaxJobsPerHour) {
+      return {
+        message: 'Alcanzaste el limite publico de guiones por hora. Proba de nuevo mas tarde.',
+        retryAfterSeconds: Math.max(1, Math.ceil((usage.hourStartedAt + 3_600_000 - now) / 1000))
+      };
+    }
+  }
+
+  const startsHeavyOperation = createsJob || /^\/api\/jobs\/[^/]+\/(?:assets|render)$/.test(url.pathname);
+  if (startsHeavyOperation && activeOperationCount() >= serverSettings.publicMaxConcurrentOperations) {
+    if (createsJob) usage.jobsThisHour = Math.max(0, usage.jobsThisHour - 1);
+    return {
+      message: 'El servidor publico esta ocupado procesando otros videos. Reintenta en un minuto.',
+      retryAfterSeconds: 60
+    };
+  }
+
+  return null;
+}
+
+function clientAddress(request) {
+  const forwarded = String(request.headers['x-forwarded-for'] || '').split(',')[0].trim();
+  return forwarded || request.socket?.remoteAddress || 'unknown';
+}
+
+function activeOperationCount() {
+  return [...jobs.values()].filter((job) => ['queued', 'running', 'rendering'].includes(job.status)).length;
+}
+
+function prunePublicUsage(now) {
+  if (publicUsage.size < 500) return;
+  for (const [clientId, usage] of publicUsage) {
+    if (now - usage.lastSeenAt > 3_600_000) publicUsage.delete(clientId);
+  }
+}
+
 function safeServerSummary() {
   return {
     host: HOST,
@@ -102,6 +192,11 @@ function safeServerSummary() {
     publicBaseUrl: serverSettings.publicBaseUrl || null,
     authRequired: Boolean(serverSettings.accessToken),
     corsOrigin: process.env.CORS_ORIGIN || '*',
+    publicRateLimit: !serverSettings.accessToken && serverSettings.publicRateLimit ? {
+      jobsPerHour: serverSettings.publicMaxJobsPerHour,
+      actionsPerMinute: serverSettings.publicMaxActionsPerMinute,
+      concurrentOperations: serverSettings.publicMaxConcurrentOperations
+    } : null,
     limitsMb: {
       scriptJson: bytesToMb(serverSettings.scriptJsonLimitBytes),
       sceneJson: bytesToMb(serverSettings.sceneJsonLimitBytes),
@@ -205,7 +300,7 @@ async function route(request, response) {
 
 function createJob(body) {
   const scriptText = String(body.scriptText || '').trim();
-  if (!scriptText) throw new Error('Pegá un guión antes de ejecutar');
+  if (!scriptText) throw new Error('Peg� un gui�n antes de ejecutar');
 
   const title = String(body.title || inferTitle(scriptText));
   const runId = body.runId || compactRunId();
@@ -667,11 +762,11 @@ function uniqueSceneValue(value, fallback, used) {
 
 function importJobAsset(job, body) {
   assertJobEditable(job);
-  if (!job.scenes?.length) throw new Error('Primero necesitás escenas para importar assets');
+  if (!job.scenes?.length) throw new Error('Primero necesit�s escenas para importar assets');
 
   const sceneId = String(body.scene_id || body.sceneId || '').trim();
   const scene = job.scenes.find((item) => item.scene_id === sceneId || item.id === sceneId);
-  if (!scene) throw new Error('No encontré la escena para importar el asset');
+  if (!scene) throw new Error('No encontr� la escena para importar el asset');
   if (!body.dataBase64) throw new Error('Falta el archivo a importar');
 
   const originalName = String(body.name || 'asset').trim();
@@ -726,7 +821,7 @@ function importJobAsset(job, body) {
 
 function assertJobEditable(job) {
   if (['queued', 'running', 'rendering'].includes(job.status)) {
-    throw new Error('Esperá a que termine la etapa actual antes de editar o importar');
+    throw new Error('Esper� a que termine la etapa actual antes de editar o importar');
   }
 }
 
@@ -1577,3 +1672,4 @@ function withCors(headers = {}) {
 function applyCors(response) {
   for (const [key, value] of Object.entries(withCors())) response.setHeader(key, value);
 }
+
