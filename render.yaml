@@ -17,6 +17,8 @@ services:
         value: ultrafast
       - key: VIDEO_FFMPEG_CRF
         value: 24
+      - key: VIDEO_FFMPEG_TIMEOUT_SECONDS
+        value: 600
       - key: CORS_ORIGIN
         value: https://mschapi.github.io
       - key: DRIVE_UPLOAD
