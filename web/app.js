@@ -1,5 +1,7 @@
 let API_BASE = resolveApiBase();
 let API_TOKEN = resolveApiToken();
+let API_USERNAME = resolveApiUsername();
+let API_PASSWORD = resolveApiPassword();
 
 const state = {
   job: null,
@@ -26,6 +28,8 @@ const els = {
   serverButton: document.querySelector('#serverButton'),
   serverPanel: document.querySelector('#serverPanel'),
   apiBaseInput: document.querySelector('#apiBaseInput'),
+  apiUsernameInput: document.querySelector('#apiUsernameInput'),
+  apiPasswordInput: document.querySelector('#apiPasswordInput'),
   apiTokenInput: document.querySelector('#apiTokenInput'),
   saveServerButton: document.querySelector('#saveServerButton'),
   localServerButton: document.querySelector('#localServerButton'),
@@ -184,20 +188,20 @@ function bindEvents() {
 async function loadHealth() {
   try {
     const health = await api('/api/health', { timeoutMs: 3500 });
-    if (health.authRequired && !API_TOKEN) {
-      els.envStatus.textContent = 'Token requerido';
+    if (health.authRequired && !hasApiCredentials()) {
+      els.envStatus.textContent = health.authType === 'basic' ? 'Ingres� para continuar' : 'Token requerido';
       els.envStatus.className = 'status-pill warn';
       els.serverPanel.hidden = false;
       syncServerInput();
     }
     if (health.apiReady) {
-      if (!health.authRequired || API_TOKEN) {
+      if (!health.authRequired || hasApiCredentials()) {
         els.envStatus.textContent = 'APIs listas';
         els.envStatus.className = 'status-pill ready';
       }
       els.dryRunToggle.checked = false;
     } else {
-      if (!health.authRequired || API_TOKEN) {
+      if (!health.authRequired || hasApiCredentials()) {
         els.envStatus.textContent = 'Modo prueba';
         els.envStatus.className = 'status-pill warn';
       }
@@ -1052,15 +1056,15 @@ function labelForAsset(asset) {
   return 'Asset';
 }
 
+function isAssetVideo(asset) {
+  return asset.type === 'pexels-video' || asset.type === 'imported-video' || /\.(mp4|mov|m4v|webm)$/i.test(asset.url || asset.file_name || asset.name || '');
+}
+
 function fileLink(url) {
   const value = String(url || '');
   if (!value) return '';
   if (/^(https?:|data:|blob:)/i.test(value)) return value;
   return API_BASE + value;
-}
-
-function isAssetVideo(asset) {
-  return asset.type === 'pexels-video' || asset.type === 'imported-video' || /\.(mp4|mov|m4v|webm)$/i.test(asset.url || asset.file_name || asset.name || '');
 }
 
 function totalDurationSeconds(list = scenes()) {
@@ -1113,6 +1117,7 @@ async function api(path, options = {}) {
   const { timeoutMs, headers: customHeaders = {}, ...fetchOptions } = options;
   const headers = { 'Content-Type': 'application/json', ...customHeaders };
   if (API_TOKEN) headers.Authorization = 'Bearer ' + API_TOKEN;
+  else if (API_USERNAME && API_PASSWORD) headers.Authorization = 'Basic ' + utf8Base64(API_USERNAME + ':' + API_PASSWORD);
   const controller = timeoutMs ? new AbortController() : null;
   const timer = timeoutMs ? window.setTimeout(() => controller.abort(), timeoutMs) : null;
   let response;
@@ -1130,6 +1135,8 @@ async function api(path, options = {}) {
   }
   const data = await response.json().catch(() => ({}));
   if (response.status === 401) {
+    els.envStatus.textContent = 'Usuario o contrase�a incorrectos';
+    els.envStatus.className = 'status-pill warn';
     els.serverPanel.hidden = false;
     syncServerInput();
   }
@@ -1139,18 +1146,28 @@ async function api(path, options = {}) {
 
 function syncServerInput() {
   els.apiBaseInput.value = API_BASE || '';
+  if (els.apiUsernameInput) els.apiUsernameInput.value = API_USERNAME || '';
+  if (els.apiPasswordInput) els.apiPasswordInput.value = API_PASSWORD || '';
   if (els.apiTokenInput) els.apiTokenInput.value = API_TOKEN || '';
 }
 
 async function saveServerBase() {
   const clean = els.apiBaseInput.value.trim().replace(/\/$/, '');
+  const username = els.apiUsernameInput?.value.trim() || '';
+  const password = els.apiPasswordInput?.value || '';
   const token = els.apiTokenInput?.value.trim() || '';
   if (!clean) return clearServerBase();
   localStorage.setItem('playgroundApiBase', clean);
   if (token) localStorage.setItem('playgroundApiToken', token);
   else localStorage.removeItem('playgroundApiToken');
+  if (username) localStorage.setItem('playgroundApiUsername', username);
+  else localStorage.removeItem('playgroundApiUsername');
+  if (password) sessionStorage.setItem('playgroundApiPassword', password);
+  else sessionStorage.removeItem('playgroundApiPassword');
   API_BASE = clean;
   API_TOKEN = token;
+  API_USERNAME = username;
+  API_PASSWORD = password;
   await loadHealth();
   await loadPreflight();
   renderAll();
@@ -1160,6 +1177,8 @@ async function useLocalServerBase() {
   const localBase = 'http://localhost:8787';
   localStorage.setItem('playgroundApiBase', localBase);
   API_BASE = localBase;
+  API_USERNAME = els.apiUsernameInput?.value.trim() || API_USERNAME;
+  API_PASSWORD = els.apiPasswordInput?.value || API_PASSWORD;
   API_TOKEN = els.apiTokenInput?.value.trim() || API_TOKEN;
   if (API_TOKEN) localStorage.setItem('playgroundApiToken', API_TOKEN);
   syncServerInput();
@@ -1171,8 +1190,12 @@ async function useLocalServerBase() {
 async function clearServerBase() {
   localStorage.removeItem('playgroundApiBase');
   localStorage.removeItem('playgroundApiToken');
+  localStorage.removeItem('playgroundApiUsername');
+  sessionStorage.removeItem('playgroundApiPassword');
   API_BASE = resolveApiBase();
   API_TOKEN = resolveApiToken();
+  API_USERNAME = resolveApiUsername();
+  API_PASSWORD = resolveApiPassword();
   syncServerInput();
   await loadHealth();
   await loadPreflight();
@@ -1227,3 +1250,23 @@ function resolveApiToken() {
   }
   return localStorage.getItem('playgroundApiToken') || '';
 }
+
+function resolveApiUsername() {
+  return localStorage.getItem('playgroundApiUsername') || '';
+}
+
+function resolveApiPassword() {
+  return sessionStorage.getItem('playgroundApiPassword') || '';
+}
+
+function hasApiCredentials() {
+  return Boolean(API_TOKEN || (API_USERNAME && API_PASSWORD));
+}
+
+function utf8Base64(value) {
+  const bytes = new TextEncoder().encode(value);
+  let binary = '';
+  for (const byte of bytes) binary += String.fromCharCode(byte);
+  return btoa(binary);
+}
+
