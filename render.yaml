@@ -2,18 +2,15 @@ services:
   - type: web
     name: playground-backend
     env: docker
+    plan: free
     healthCheckPath: /api/health
-    disk:
-      name: playground-jobs
-      mountPath: /data
-      sizeGB: 10
     envVars:
       - key: HOST
         value: 0.0.0.0
       - key: PORT
         value: 8787
       - key: OUTPUT_ROOT
-        value: /data/jobs
+        value: /tmp/playground-jobs
       - key: FFMPEG_PATH
         value: ffmpeg
       - key: CORS_ORIGIN
