@@ -190,7 +190,7 @@ async function loadHealth() {
   try {
     const health = await api('/api/health', { timeoutMs: isPublishedPage() ? 75_000 : 3500 });
     if (health.authRequired && !hasApiCredentials()) {
-      els.envStatus.textContent = health.authType === 'basic' ? 'Ingres� para continuar' : 'Token requerido';
+      els.envStatus.textContent = health.authType === 'basic' ? 'Ingresa para continuar' : 'Token requerido';
       els.envStatus.className = 'status-pill warn';
       els.serverPanel.hidden = false;
       syncServerInput();
@@ -1143,7 +1143,7 @@ async function api(path, options = {}) {
   }
   const data = await response.json().catch(() => ({}));
   if (response.status === 401) {
-    els.envStatus.textContent = 'Usuario o contrase�a incorrectos';
+    els.envStatus.textContent = 'Usuario o contrasena incorrectos';
     els.envStatus.className = 'status-pill warn';
     els.serverPanel.hidden = false;
     syncServerInput();
@@ -1250,8 +1250,13 @@ function resolveApiBase() {
   const saved = localStorage.getItem('playgroundApiBase');
   if (saved) {
     const clean = saved.replace(/\/$/, '');
-    if (isPublishedPage() && /^http:\/\/(?:localhost|127\.0\.0\.1)(?::\d+)?$/i.test(clean)) {
+    const temporaryBackend = /^http:\/\/(?:localhost|127\.0\.0\.1)(?::\d+)?$/i.test(clean) ||
+      /^https:\/\/[^/]+\.trycloudflare\.com$/i.test(clean);
+    if (isPublishedPage() && temporaryBackend) {
       localStorage.removeItem('playgroundApiBase');
+      localStorage.removeItem('playgroundApiToken');
+      localStorage.removeItem('playgroundApiUsername');
+      sessionStorage.removeItem('playgroundApiPassword');
     } else {
       return clean;
     }
