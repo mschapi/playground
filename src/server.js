@@ -65,6 +65,8 @@ server.listen(PORT, HOST, () => {
 function loadServerSettings() {
   return {
     accessToken: env('PIPELINE_ACCESS_TOKEN', { defaultValue: env('BACKEND_ACCESS_TOKEN', { defaultValue: '' }) }),
+    basicAuthUser: env('BASIC_AUTH_USER', { defaultValue: '' }),
+    basicAuthPassword: env('BASIC_AUTH_PASSWORD', { defaultValue: '' }),
     publicBaseUrl: cleanBaseUrl(env('PUBLIC_BASE_URL', { defaultValue: '' })),
     scriptJsonLimitBytes: megabytesEnv('MAX_SCRIPT_JSON_MB', 2),
     sceneJsonLimitBytes: megabytesEnv('MAX_SCENE_JSON_MB', 20),
@@ -92,7 +94,7 @@ function cleanBaseUrl(value) {
 }
 
 function isProtectedApiRequest(request) {
-  if (!serverSettings.accessToken) return false;
+  if (!hasServerAuth()) return false;
   const url = new URL(request.url, 'http://localhost:' + PORT);
   if (!url.pathname.startsWith('/api/')) return false;
   if (request.method === 'GET' && /^\/api\/jobs\/[^/]+\/(?:file|download)$/.test(url.pathname)) return false;
@@ -100,7 +102,24 @@ function isProtectedApiRequest(request) {
 }
 
 function isAuthorized(request) {
-  return readAccessToken(request) === serverSettings.accessToken;
+  const accessToken = readAccessToken(request);
+  if (serverSettings.accessToken && accessToken === serverSettings.accessToken) return true;
+
+  const basic = readBasicCredentials(request);
+  return Boolean(
+    serverSettings.basicAuthUser &&
+    serverSettings.basicAuthPassword &&
+    basic &&
+    basic.username === serverSettings.basicAuthUser &&
+    basic.password === serverSettings.basicAuthPassword
+  );
+}
+
+function hasServerAuth() {
+  return Boolean(
+    serverSettings.accessToken ||
+    (serverSettings.basicAuthUser && serverSettings.basicAuthPassword)
+  );
 }
 
 function readAccessToken(request) {
@@ -109,8 +128,25 @@ function readAccessToken(request) {
   return String(bearer || request.headers['x-pipeline-token'] || '').trim();
 }
 
+function readBasicCredentials(request) {
+  const authHeader = String(request.headers.authorization || '');
+  const encoded = authHeader.match(/^Basic\s+(.+)$/i)?.[1];
+  if (!encoded) return null;
+  try {
+    const decoded = Buffer.from(encoded, 'base64').toString('utf8');
+    const separator = decoded.indexOf(':');
+    if (separator < 0) return null;
+    return {
+      username: decoded.slice(0, separator),
+      password: decoded.slice(separator + 1)
+    };
+  } catch {
+    return null;
+  }
+}
+
 function checkPublicRateLimit(request) {
-  if (serverSettings.accessToken || !serverSettings.publicRateLimit) return null;
+  if (!serverSettings.publicRateLimit) return null;
 
   const url = new URL(request.url, 'http://localhost:' + PORT);
   if (!url.pathname.startsWith('/api/') || !['POST', 'PATCH'].includes(request.method)) return null;
@@ -190,9 +226,10 @@ function safeServerSummary() {
     host: HOST,
     port: PORT,
     publicBaseUrl: serverSettings.publicBaseUrl || null,
-    authRequired: Boolean(serverSettings.accessToken),
+    authRequired: hasServerAuth(),
+    authType: serverSettings.basicAuthUser && serverSettings.basicAuthPassword ? 'basic' : serverSettings.accessToken ? 'token' : null,
     corsOrigin: process.env.CORS_ORIGIN || '*',
-    publicRateLimit: !serverSettings.accessToken && serverSettings.publicRateLimit ? {
+    publicRateLimit: serverSettings.publicRateLimit ? {
       jobsPerHour: serverSettings.publicMaxJobsPerHour,
       actionsPerMinute: serverSettings.publicMaxActionsPerMinute,
       concurrentOperations: serverSettings.publicMaxConcurrentOperations
@@ -222,7 +259,8 @@ async function route(request, response) {
       driveReady: preflight.checks.drive.ready,
       videoEnabled: config.video.enabled,
       outputRoot: config.outputRoot,
-      authRequired: Boolean(serverSettings.accessToken),
+      authRequired: hasServerAuth(),
+      authType: serverSettings.basicAuthUser && serverSettings.basicAuthPassword ? 'basic' : serverSettings.accessToken ? 'token' : null,
       publicBaseUrl: serverSettings.publicBaseUrl || null,
       server: safeServerSummary()
     });
