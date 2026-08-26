@@ -338,7 +338,7 @@ async function route(request, response) {
 
 function createJob(body) {
   const scriptText = String(body.scriptText || '').trim();
-  if (!scriptText) throw new Error('Peg� un gui�n antes de ejecutar');
+  if (!scriptText) throw new Error('Pega un guion antes de ejecutar');
 
   const title = String(body.title || inferTitle(scriptText));
   const runId = body.runId || compactRunId();
@@ -800,11 +800,11 @@ function uniqueSceneValue(value, fallback, used) {
 
 function importJobAsset(job, body) {
   assertJobEditable(job);
-  if (!job.scenes?.length) throw new Error('Primero necesit�s escenas para importar assets');
+  if (!job.scenes?.length) throw new Error('Primero necesitas escenas para importar assets');
 
   const sceneId = String(body.scene_id || body.sceneId || '').trim();
   const scene = job.scenes.find((item) => item.scene_id === sceneId || item.id === sceneId);
-  if (!scene) throw new Error('No encontr� la escena para importar el asset');
+  if (!scene) throw new Error('No encontre la escena para importar el asset');
   if (!body.dataBase64) throw new Error('Falta el archivo a importar');
 
   const originalName = String(body.name || 'asset').trim();
@@ -859,7 +859,7 @@ function importJobAsset(job, body) {
 
 function assertJobEditable(job) {
   if (['queued', 'running', 'rendering'].includes(job.status)) {
-    throw new Error('Esper� a que termine la etapa actual antes de editar o importar');
+    throw new Error('Espera a que termine la etapa actual antes de editar o importar');
   }
 }
 
