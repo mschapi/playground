@@ -37,7 +37,6 @@ Cada corrida queda en `outputs/jobs/<run_id>-<titulo>/`:
 - `asset-manifest.json`
 - `run-summary.json`
 
-
 ## Uso web simple
 
 La manera simple de usarlo es con la app web local:
@@ -69,7 +68,6 @@ Flujo:
 13. Previsualizas y descargas el video terminado.
 
 Si faltan API keys, la app se abre en `Prueba`, que genera placeholders sin gastar APIs. Para una corrida real desactiva `Prueba` y completa `keys.txt` o `.env`.
-
 
 ## Backend general para compartir
 
@@ -106,7 +104,7 @@ En la web publicada, tocar `Servidor` y completar la URL HTTPS del backend. Si `
 Tambien funciona por URL:
 
 ```txt
-https://mschapi.github.io/playground/?apiBase=https://tu-backend.com&apiToken=tu_token&apiToken=tu_token
+https://mschapi.github.io/playground/?apiBase=https://tu-backend.com&apiToken=tu_token
 ```
 
 Hay mas detalle en `BACKEND_DEPLOY.md` y un ejemplo de despliegue en `render.yaml`.
@@ -232,10 +230,14 @@ Tambien se aceptan los nombres tecnicos de entorno, por ejemplo `OPENAI_API_KEY`
 - `DRIVE_PARENT_FOLDER_ID`, carpeta destino especifica
 - `XML_PATH_MODE=tmp-filename`, replica n8n con `file://localhost//tmp/nombre.ext`
 - `XML_PATH_MODE=local-full-path`, usa rutas reales del disco local
+- `VIDEO_SUBTITLE_FONT_NAME=Chakra Petch`
+- `VIDEO_SUBTITLE_FONT_SIZE=52`
+- `VIDEO_SUBTITLE_TEXT_COLOR=#ffffff`
+- `VIDEO_SUBTITLE_BACKGROUND_COLOR=#c21824`
 
 ## GitHub Pages
 
-GitHub Pages publica solo la UI estatica. Esa UI no contiene secrets. Para usar APIs sin exponer keys necesita conectarse a un backend Node con `src/server.js` corriendo en una maquina o servidor.
+GitHub Pages publica solo la UI estatica. Esa UI no contiene secrets. Para usar APIs sin exponer keys necesita conectarse a un backend Node con `src/server.js` corriendo en una maquina o servidor HTTPS.
 
 En local:
 
@@ -243,7 +245,7 @@ En local:
 npm start
 ```
 
-En una pagina publicada, usa el boton `Servidor` para guardar el backend publico. Tambien podes pasarlo por query string:
+En una pagina publicada, usa el boton `Servidor` para guardar el backend publico y el token si corresponde. Tambien podes pasarlo por query string:
 
 ```txt
 https://mschapi.github.io/playground/?apiBase=https://tu-backend.com&apiToken=tu_token
