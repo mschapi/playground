@@ -1,4 +1,4 @@
-﻿import { execFile } from 'node:child_process';
+import { execFile } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import { promisify } from 'node:util';
 import { extname, join, resolve } from 'node:path';
@@ -49,8 +49,7 @@ export async function renderAiStoryboardVideo({ scenes, aiImages, config, outDir
     String(config.fps),
     '-pix_fmt',
     'yuv420p',
-    '-c:v',
-    'libx264',
+    ...videoCodecArgs(config),
     '-movflags',
     '+faststart',
     outputPath
@@ -132,8 +131,7 @@ export async function renderSelectedStoryboardVideo({ scenes, selectedAssets, se
       String(config.fps),
       '-pix_fmt',
       'yuv420p',
-      '-c:v',
-      'libx264',
+      ...videoCodecArgs(config),
       ...outputArgs,
       segmentPath
     ]);
@@ -178,8 +176,7 @@ export async function renderSelectedStoryboardVideo({ scenes, selectedAssets, se
         '-map',
         '1:a:0',
         '-shortest',
-        '-c:v',
-        'libx264',
+        ...videoCodecArgs(config),
         '-c:a',
         'aac',
         '-movflags',
@@ -197,8 +194,7 @@ export async function renderSelectedStoryboardVideo({ scenes, selectedAssets, se
           '0:v:0',
           '-map',
           '0:a:0?',
-          '-c:v',
-          'libx264',
+          ...videoCodecArgs(config),
           '-c:a',
           'aac',
           '-movflags',
@@ -212,8 +208,7 @@ export async function renderSelectedStoryboardVideo({ scenes, selectedAssets, se
           '-vf',
           vfWithSubtitles,
           '-an',
-          '-c:v',
-          'libx264',
+          ...videoCodecArgs(config),
           '-movflags',
           '+faststart',
           outputPath
@@ -337,6 +332,15 @@ async function assertFfmpeg(ffmpegPath) {
   }
 }
 
+function videoCodecArgs(config) {
+  const requestedPreset = String(config.video.ffmpegPreset || 'veryfast').toLowerCase();
+  const allowedPresets = new Set(['ultrafast', 'superfast', 'veryfast', 'faster', 'fast', 'medium', 'slow']);
+  const preset = allowedPresets.has(requestedPreset) ? requestedPreset : 'veryfast';
+  const requestedCrf = Number(config.video.ffmpegCrf || 23);
+  const crf = Number.isFinite(requestedCrf) ? Math.max(0, Math.min(51, Math.round(requestedCrf))) : 23;
+  return ['-c:v', 'libx264', '-preset', preset, '-crf', String(crf)];
+}
+
 function concatPathEscape(filePath) {
   return filePath.replace(/\\/g, '/').replace(/'/g, "'\\''");
 }
@@ -369,3 +373,4 @@ function assTime(seconds) {
   const h = Math.floor(totalMinutes / 60);
   return `${h}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}.${String(cs).padStart(2, '0')}`;
 }
+
