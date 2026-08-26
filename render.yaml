@@ -17,6 +17,10 @@ services:
         value: https://mschapi.github.io
       - key: DRIVE_UPLOAD
         value: false
+      - key: BASIC_AUTH_USER
+        sync: false
+      - key: BASIC_AUTH_PASSWORD
+        sync: false
       - key: PUBLIC_RATE_LIMIT
         value: true
       - key: PUBLIC_MAX_JOBS_PER_HOUR
