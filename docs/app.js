@@ -1,3 +1,4 @@
+const DEFAULT_PUBLIC_API_BASE = 'https://playground-backend-q4cn.onrender.com';
 let API_BASE = resolveApiBase();
 let API_TOKEN = resolveApiToken();
 let API_USERNAME = resolveApiUsername();
@@ -187,7 +188,7 @@ function bindEvents() {
 
 async function loadHealth() {
   try {
-    const health = await api('/api/health', { timeoutMs: 3500 });
+    const health = await api('/api/health', { timeoutMs: isPublishedPage() ? 75_000 : 3500 });
     if (health.authRequired && !hasApiCredentials()) {
       els.envStatus.textContent = health.authType === 'basic' ? 'Ingres� para continuar' : 'Token requerido';
       els.envStatus.className = 'status-pill warn';
@@ -237,7 +238,7 @@ async function tryLocalBackendFallback() {
 
 async function loadPreflight() {
   try {
-    state.preflight = await api('/api/preflight', { timeoutMs: 3500 });
+    state.preflight = await api('/api/preflight', { timeoutMs: isPublishedPage() ? 75_000 : 3500 });
     if (!state.imageStylePrompt && state.preflight?.config?.imageStylePrompt) {
       state.imageStylePrompt = state.preflight.config.imageStylePrompt;
     }
@@ -296,13 +297,20 @@ async function createJob() {
 
 function startPolling(jobId) {
   stopPolling();
+  let transientFailures = 0;
   state.pollTimer = window.setInterval(async () => {
     try {
       const job = await api('/api/jobs/' + encodeURIComponent(jobId));
+      transientFailures = 0;
       state.job = job;
       renderAll();
       if (['scenes_ready', 'ready', 'complete', 'error'].includes(job.status)) stopPolling();
     } catch (error) {
+      if ([404, 502, 503, 504].includes(error.status) && transientFailures < 20) {
+        transientFailures += 1;
+        setPhase('Sincronizando con el servidor', state.job?.progress || 1);
+        return;
+      }
       setPhase(error.message, 0);
       stopPolling();
     }
@@ -1140,7 +1148,11 @@ async function api(path, options = {}) {
     els.serverPanel.hidden = false;
     syncServerInput();
   }
-  if (!response.ok) throw new Error(data.error || 'Error de servidor');
+  if (!response.ok) {
+    const error = new Error(data.error || 'Error de servidor');
+    error.status = response.status;
+    throw error;
+  }
   return data;
 }
 
@@ -1236,9 +1248,16 @@ function resolveApiBase() {
     return clean;
   }
   const saved = localStorage.getItem('playgroundApiBase');
-  if (saved) return saved.replace(/\/$/, '');
+  if (saved) {
+    const clean = saved.replace(/\/$/, '');
+    if (isPublishedPage() && /^http:\/\/(?:localhost|127\.0\.0\.1)(?::\d+)?$/i.test(clean)) {
+      localStorage.removeItem('playgroundApiBase');
+    } else {
+      return clean;
+    }
+  }
   if (location.hostname === 'localhost' || location.hostname === '127.0.0.1') return '';
-  return '';
+  return DEFAULT_PUBLIC_API_BASE;
 }
 
 function resolveApiToken() {
