@@ -116,6 +116,8 @@ export function loadConfig(configPath = 'config/pipeline.config.json') {
       ...base.video,
       enabled: boolEnv('VIDEO_ENABLED', base.video.enabled),
       ffmpegPath: env('FFMPEG_PATH', { defaultValue: defaultFfmpegPath() }),
+      ffmpegPreset: env('VIDEO_FFMPEG_PRESET', { defaultValue: base.video.ffmpegPreset || 'veryfast' }),
+      ffmpegCrf: numberEnv('VIDEO_FFMPEG_CRF', base.video.ffmpegCrf || 23),
       subtitleFontName: env('VIDEO_SUBTITLE_FONT_NAME', {
         defaultValue: base.video.subtitleFontName
       }),
@@ -159,3 +161,4 @@ function findFirstFile(dir, fileName) {
   }
   return null;
 }
+
