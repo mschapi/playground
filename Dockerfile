@@ -1,6 +1,8 @@
 FROM node:20-bookworm-slim
 
-RUN apt-get update   && apt-get install -y --no-install-recommends ca-certificates ffmpeg   && rm -rf /var/lib/apt/lists/*
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends ca-certificates ffmpeg \
+  && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
@@ -15,8 +17,12 @@ ENV HOST=0.0.0.0
 ENV PORT=8787
 ENV OUTPUT_ROOT=/data/jobs
 ENV FFMPEG_PATH=ffmpeg
+ENV VIDEO_FFMPEG_PRESET=ultrafast
+ENV VIDEO_FFMPEG_CRF=24
+ENV VIDEO_FFMPEG_TIMEOUT_SECONDS=600
 
 VOLUME ["/data/jobs"]
 EXPOSE 8787
 
 CMD ["node", "src/server.js"]
+
