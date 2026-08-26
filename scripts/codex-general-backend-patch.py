@@ -20,6 +20,16 @@ def replace_once(text, old, new, label):
     return text.replace(old, new, 1)
 
 
+def replace_between(text, start_marker, end_marker, replacement, label):
+    start = text.find(start_marker)
+    if start < 0:
+        raise SystemExit(f'Missing start marker: {label}')
+    end = text.find(end_marker, start)
+    if end < 0:
+        raise SystemExit(f'Missing end marker: {label}')
+    return text[:start] + replacement + text[end:]
+
+
 server = read('src/server.js')
 server = replace_once(server, "import { extname, join, parse, relative, resolve } from 'node:path';", "import { extname, join, parse, relative, resolve, sep } from 'node:path';", 'server path import')
 server = replace_once(server, "} from './utils/files.js';\n\nconst PORT = Number(process.env.PORT || 8787);\nconst ROOT = resolve('.');\nconst WEB_ROOT = resolve('web');\nconst config = loadConfig();\nconst jobs = new Map();", "} from './utils/files.js';\nimport { env, numberEnv } from './utils/env.js';\n\nconst ROOT = resolve('.');\nconst WEB_ROOT = resolve('web');\nconst config = loadConfig();\nconst PORT = Number(process.env.PORT || 8787);\nconst HOST = process.env.HOST || '0.0.0.0';\nconst serverSettings = loadServerSettings();\nconst jobs = new Map();", 'server imports/constants')
@@ -176,64 +186,6 @@ new_health = """async function loadHealth() {
 """
 app = replace_once(app, old_health, new_health, 'app loadHealth')
 app = replace_once(app, "    apiBase: API_BASE || 'local',\n    publishedPage: isPublishedPage(),", "    apiBase: API_BASE || 'local',\n    hasApiToken: Boolean(API_TOKEN),\n    publishedPage: isPublishedPage(),", 'app debug token')
-old_api_block = """async function api(path, options = {}) {
-  if (!API_BASE && isPublishedPage()) {
-    throw new Error('Falta configurar un backend HTTPS en Servidor');
-  }
-  const { timeoutMs, ...fetchOptions } = options;
-  const controller = timeoutMs ? new AbortController() : null;
-  const timer = timeoutMs ? window.setTimeout(() => controller.abort(), timeoutMs) : null;
-  let response;
-  try {
-    response = await fetch(API_BASE + path, {
-      headers: { 'Content-Type': 'application/json' },
-      signal: controller?.signal,
-      ...fetchOptions
-    });
-  } catch (error) {
-    if (error.name === 'AbortError') throw new Error('Backend no responde');
-    throw error;
-  } finally {
-    if (timer) window.clearTimeout(timer);
-  }
-  const data = await response.json().catch(() => ({}));
-  if (!response.ok) throw new Error(data.error || 'Error de servidor');
-  return data;
-}
-
-function syncServerInput() {
-  els.apiBaseInput.value = API_BASE || '';
-}
-
-async function saveServerBase() {
-  const clean = els.apiBaseInput.value.trim().replace(/\/$/, '');
-  if (!clean) return clearServerBase();
-  localStorage.setItem('playgroundApiBase', clean);
-  API_BASE = clean;
-  await loadHealth();
-  await loadPreflight();
-  renderAll();
-}
-
-async function useLocalServerBase() {
-  const localBase = 'http://localhost:8787';
-  localStorage.setItem('playgroundApiBase', localBase);
-  API_BASE = localBase;
-  syncServerInput();
-  await loadHealth();
-  await loadPreflight();
-  renderAll();
-}
-
-async function clearServerBase() {
-  localStorage.removeItem('playgroundApiBase');
-  API_BASE = resolveApiBase();
-  syncServerInput();
-  await loadHealth();
-  await loadPreflight();
-  renderAll();
-}
-"""
 new_api_block = """async function api(path, options = {}) {
   if (!API_BASE && isPublishedPage()) {
     throw new Error('Falta configurar un backend HTTPS en Servidor');
@@ -307,8 +259,9 @@ async function clearServerBase() {
   renderAll();
 }
 """
-app = replace_once(app, old_api_block, new_api_block, 'app api block')
-app = app.rstrip() + """
+app = replace_between(app, 'async function api(path, options = {}) {', '\nfunction isPublishedPage()', new_api_block, 'app api block')
+if 'function resolveApiToken()' not in app:
+    app = app.rstrip() + """
 
 function resolveApiToken() {
   const params = new URLSearchParams(location.search);
@@ -337,7 +290,8 @@ MAX_UPLOAD_JSON_MB=80
 MAX_RENDER_JSON_MB=300
 
 """
-env_example = replace_once(env_example, "# Si existen .env y keys.txt, keys.txt gana para las API keys locales.\n\n", "# Si existen .env y keys.txt, keys.txt gana para las API keys locales.\n\n" + server_block, 'env server block')
+if 'PIPELINE_ACCESS_TOKEN=' not in env_example:
+    env_example = replace_once(env_example, "# Si existen .env y keys.txt, keys.txt gana para las API keys locales.\n\n", "# Si existen .env y keys.txt, keys.txt gana para las API keys locales.\n\n" + server_block, 'env server block')
 write('.env.example', env_example)
 
 keys = read('keys.example.txt')
@@ -398,39 +352,9 @@ if '## Backend general para compartir' not in readme:
     readme = replace_once(readme, '## Debug y preflight\n', backend_section + '## Debug y preflight\n', 'readme backend section')
 if '## Variables principales\n\n- `HOST=0.0.0.0`' not in readme:
     readme = replace_once(readme, '## Variables principales\n\n', '## Variables principales\n\n- `HOST=0.0.0.0`\n- `PORT=8787`\n- `PUBLIC_BASE_URL`\n- `CORS_ORIGIN`\n- `PIPELINE_ACCESS_TOKEN`, recomendado en backends compartidos\n- `OUTPUT_ROOT`\n', 'readme vars')
-old_pages = """## GitHub Pages
-
-El workflow `.github/workflows/deploy-pages.yml` publica la UI estatica de `web/` en GitHub Pages. Esa UI no contiene secrets. Para usar APIs sin exponer keys necesita conectarse a un backend Node con `src/server.js` corriendo en una maquina o servidor.
-
-En local:
-
-```bash
-node src/server.js
-```
-
-En una pagina publicada, usa el boton `Servidor` para guardar el backend publico. Tambien podes pasarlo por query string:
-
-```txt
-https://mschapi.github.io/playground/?apiBase=https://tu-backend.com
-```
-"""
-new_pages = """## GitHub Pages
-
-GitHub Pages publica solo la UI estatica. Esa UI no contiene secrets. Para usar APIs sin exponer keys necesita conectarse a un backend Node con `src/server.js` corriendo en una maquina o servidor HTTPS.
-
-En local:
-
-```bash
-npm start
-```
-
-En una pagina publicada, usa el boton `Servidor` para guardar el backend publico y el token si corresponde. Tambien podes pasarlo por query string:
-
-```txt
-https://mschapi.github.io/playground/?apiBase=https://tu-backend.com&apiToken=tu_token
-```
-"""
-readme = replace_once(readme, old_pages, new_pages, 'readme pages')
+readme = readme.replace('node src/server.js', 'npm start')
+readme = readme.replace('https://mschapi.github.io/playground/?apiBase=https://tu-backend.com', 'https://mschapi.github.io/playground/?apiBase=https://tu-backend.com&apiToken=tu_token')
+readme = readme.replace('El workflow `.github/workflows/deploy-pages.yml` publica la UI estatica de `web/` en GitHub Pages.', 'GitHub Pages publica solo la UI estatica.')
 write('README.md', readme)
 
 write('Dockerfile', """FROM node:20-bookworm-slim
