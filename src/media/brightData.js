@@ -1,4 +1,4 @@
-﻿import { join } from 'node:path';
+import { join } from 'node:path';
 import { downloadFile, fetchJson, fetchText } from '../utils/http.js';
 import { ensureDir, sanitizeAssetTitle, writeJson } from '../utils/files.js';
 
@@ -31,7 +31,77 @@ export async function fetchBrightDataGoogleImages(scenes, config, outDir) {
 }
 
 async function fetchSceneGoogleImages(scene, config, outDir) {
-  const googleUrl = buildGoogleImagesUrl(scene.google_image_query || scene.search_query, config);
+  const requestedCount = Math.max(1, Number(config.brightData.imageCount || 3));
+  const blockedDomains = config.brightData.blockedDownloadDomains || [];
+  const candidates = [];
+  const seen = new Set();
+
+  for (let page = 0; page < requestedCount + 2 && candidates.length < requestedCount * 3; page += 1) {
+    const googleUrl = buildGoogleImagesUrl(scene.google_image_query || scene.search_query, config, page * 10);
+    const parsed = await requestScenePayload(scene, config, googleUrl);
+    const pageImages = chooseBrightDataImages(parsed, blockedDomains, requestedCount * 2);
+    for (const image of pageImages) {
+      if (!image?.imageUrl || seen.has(image.imageUrl)) continue;
+      seen.add(image.imageUrl);
+      candidates.push({ ...image, googleUrl });
+    }
+  }
+
+  if (!candidates.length) {
+    throw new Error('Bright Data no devolvio imagenes descargables para la escena ' + scene.scene_number);
+  }
+
+  const assets = [];
+  for (const image of candidates) {
+    if (assets.length >= requestedCount) break;
+    const option = assets.length + 1;
+    const imageRank = image.rank || image.global_rank || option;
+    const title = image.title || image.image_alt || scene.search_query || 'image';
+    const cleanTitle = sanitizeAssetTitle(title, 'imageGoogle');
+    const fileName = scene.run_id + '_' + scene.scene_label + '_imageGoogle_' + cleanTitle + '_' + option + '.jpg';
+    const filePath = join(outDir, fileName);
+
+    try {
+      await downloadFile(image.imageUrl, filePath, {
+        headers: {
+          'User-Agent': 'Mozilla/5.0',
+          Accept: 'image/*,*/*;q=0.8'
+        }
+      });
+    } catch {
+      continue;
+    }
+
+    assets.push({
+      type: 'brightdata-google-image',
+      sceneId: scene.id,
+      scene_id: scene.scene_id,
+      scene_label: scene.scene_label,
+      sceneNumber: scene.scene_number,
+      option,
+      image_rank: option,
+      source_rank: imageRank,
+      path: filePath,
+      name: fileName,
+      file_name: fileName,
+      image_url: image.imageUrl,
+      image_title: title,
+      clean_title: cleanTitle,
+      sourceUrl: image.imageUrl,
+      source_page: image.link || null,
+      query: scene.google_image_query || scene.search_query,
+      googleUrl: image.googleUrl,
+      found: true
+    });
+  }
+
+  if (!assets.length) {
+    throw new Error('Bright Data encontro resultados pero no pudo descargar ninguna imagen para la escena ' + scene.scene_number);
+  }
+  return assets;
+}
+
+async function requestScenePayload(scene, config, googleUrl) {
   const payload = {
     zone: config.brightData.zone,
     url: googleUrl,
@@ -66,48 +136,7 @@ async function fetchSceneGoogleImages(scene, config, outDir) {
     parsed = getBrightDataPayload(diagnostic);
   }
   if (!parsed) throw new Error('Bright Data devolvio una respuesta vacia o sin JSON parseable. Revisa que la cuenta y la zona SERP esten activas.');
-  const images = chooseBrightDataImages(parsed, config.brightData.blockedDownloadDomains || [], config.brightData.imageCount || 3);
-  const assets = [];
-
-  for (const [index, image] of images.entries()) {
-    const option = index + 1;
-    const imageRank = image.rank || image.global_rank || option;
-    const title = image.title || image.image_alt || scene.search_query || 'image';
-    const cleanTitle = sanitizeAssetTitle(title, 'imageGoogle');
-    const fileName = scene.run_id + '_' + scene.scene_label + '_imageGoogle_' + cleanTitle + '_' + option + '.jpg';
-    const filePath = join(outDir, fileName);
-
-    await downloadFile(image.imageUrl, filePath, {
-      headers: {
-        'User-Agent': 'Mozilla/5.0',
-        Accept: 'image/*,*/*;q=0.8'
-      }
-    });
-
-    assets.push({
-      type: 'brightdata-google-image',
-      sceneId: scene.id,
-      scene_id: scene.scene_id,
-      scene_label: scene.scene_label,
-      sceneNumber: scene.scene_number,
-      option,
-      image_rank: option,
-      source_rank: imageRank,
-      path: filePath,
-      name: fileName,
-      file_name: fileName,
-      image_url: image.imageUrl,
-      image_title: title,
-      clean_title: cleanTitle,
-      sourceUrl: image.imageUrl,
-      source_page: image.link || null,
-      query: scene.google_image_query || scene.search_query,
-      googleUrl,
-      found: true
-    });
-  }
-
-  return assets;
+  return parsed;
 }
 
 function brightDataRequestOptions(config, payload) {
@@ -130,13 +159,13 @@ function bearer(value) {
   return /^Bearer\s+/i.test(token) ? token : 'Bearer ' + token;
 }
 
-function buildGoogleImagesUrl(query, config) {
+function buildGoogleImagesUrl(query, config, start = 0) {
   const url = new URL('https://' + config.brightData.googleHost + '/search');
   url.searchParams.set('q', query || 'image');
   url.searchParams.set('udm', '2');
   url.searchParams.set('hl', config.brightData.language);
   url.searchParams.set('gl', config.brightData.country);
-  url.searchParams.set('start', '0');
+  url.searchParams.set('start', String(Math.max(0, start)));
   url.searchParams.set('brd_json', '1');
   return url.toString();
 }
@@ -247,3 +276,4 @@ function extractUrls(text) {
     .map((url) => url.replace(/[),.;]+$/, ''))
     .filter((url) => /\.(jpe?g|png|webp|gif)(?:[?#].*)?$/i.test(url) || /googleusercontent|gstatic|encrypted-tbn/i.test(url));
 }
+
