@@ -336,10 +336,10 @@ async function runFfmpeg(config, args) {
   const timeoutSeconds = Math.max(30, Number(config.video.ffmpegTimeoutSeconds || 600));
   await execFileAsync(
     config.video.ffmpegPath,
-    ['-nostdin', '-hide_banner', '-loglevel', 'error', ...args],
+    ['-nostdin', '-hide_banner', '-loglevel', 'error', '-xerror', ...args],
     {
       timeout: timeoutSeconds * 1000,
-      maxBuffer: 4 * 1024 * 1024,
+      maxBuffer: 8 * 1024 * 1024,
       windowsHide: true
     }
   );
