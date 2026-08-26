@@ -17,8 +17,18 @@ services:
         value: https://mschapi.github.io
       - key: DRIVE_UPLOAD
         value: false
-      - key: PIPELINE_ACCESS_TOKEN
-        generateValue: true
+      - key: PUBLIC_RATE_LIMIT
+        value: true
+      - key: PUBLIC_MAX_JOBS_PER_HOUR
+        value: 3
+      - key: PUBLIC_MAX_ACTIONS_PER_MINUTE
+        value: 60
+      - key: PUBLIC_MAX_CONCURRENT_OPERATIONS
+        value: 2
+      - key: MAX_UPLOAD_JSON_MB
+        value: 60
+      - key: MAX_RENDER_JSON_MB
+        value: 100
       - key: OPENAI_API_KEY
         sync: false
       - key: PEXELS_API_KEY
@@ -31,3 +41,4 @@ services:
         sync: false
       - key: DRIVE_PARENT_FOLDER_ID
         sync: false
+
