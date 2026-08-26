@@ -14,7 +14,7 @@
           <h1>Playground de guiones</h1>
         </div>
         <div class="topbar-actions">
-          <button class="secondary small-button" id="serverButton">Servidor</button>
+          <button class="secondary small-button" id="serverButton">Ingresar</button>
           <div class="status-pill" id="envStatus">Conectando</div>
         </div>
       </header>
@@ -23,13 +23,19 @@
         <label class="field-label">Backend
           <input class="scene-input" id="apiBaseInput" placeholder="https://tu-backend.com" />
         </label>
-        <label class="field-label">Token
+        <label class="field-label">Usuario
+          <input class="scene-input" id="apiUsernameInput" autocomplete="username" placeholder="Usuario" />
+        </label>
+        <label class="field-label">Contrase�a
+          <input class="scene-input" id="apiPasswordInput" type="password" autocomplete="current-password" placeholder="Contrase�a" />
+        </label>
+        <label class="field-label">Token avanzado
           <input class="scene-input" id="apiTokenInput" type="password" autocomplete="off" placeholder="Opcional" />
         </label>
         <div class="actions-row compact-actions">
           <button class="secondary" id="localServerButton">Usar local</button>
           <button class="secondary" id="clearServerButton">Limpiar</button>
-          <button class="primary" id="saveServerButton">Guardar</button>
+          <button class="primary" id="saveServerButton">Ingresar</button>
         </div>
       </section>
 
@@ -201,3 +207,4 @@
     <script src="app.js?v=20260825-general-backend" type="module"></script>
   </body>
 </html>
+
