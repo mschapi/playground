@@ -14,6 +14,7 @@
     "check": "node --check src/index.js && node --check src/server.js && node --check web/app.js && node --check src/video/ffmpeg.js",
     "web": "node src/server.js",
     "smoke:public": "node scripts/smoke-public-backend.mjs",
+    "smoke:render-public": "node scripts/smoke-render-only.mjs",
     "setup:fonts": "node scripts/setup-fonts.mjs",
     "setup:ffmpeg:windows": "powershell -ExecutionPolicy Bypass -File scripts/setup-windows-ffmpeg.ps1"
   }
