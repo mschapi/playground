@@ -43,7 +43,7 @@ Cada corrida queda en `outputs/jobs/<run_id>-<titulo>/`:
 La manera simple de usarlo es con la app web local:
 
 ```bash
-node src/server.js
+npm start
 ```
 
 Abrir:
@@ -69,6 +69,47 @@ Flujo:
 13. Previsualizas y descargas el video terminado.
 
 Si faltan API keys, la app se abre en `Prueba`, que genera placeholders sin gastar APIs. Para una corrida real desactiva `Prueba` y completa `keys.txt` o `.env`.
+
+
+## Backend general para compartir
+
+El backend ya puede correr como servicio generico. Cada persona o equipo puede desplegarlo con sus propias keys sin tocar codigo.
+
+Variables nuevas:
+
+- `HOST=0.0.0.0`, necesario en Docker o plataformas cloud.
+- `PORT=8787`, o el puerto que te asigne el proveedor.
+- `PUBLIC_BASE_URL=https://tu-backend.com`, opcional para documentar la URL publica en health/preflight.
+- `CORS_ORIGIN=https://mschapi.github.io`, o `*` si queres permitir cualquier frontend.
+- `PIPELINE_ACCESS_TOKEN=...`, opcional pero recomendado para que otros no gasten tus APIs sin permiso.
+- `OUTPUT_ROOT=/data/jobs`, recomendado en Docker con volumen persistente.
+- `MAX_SCRIPT_JSON_MB`, `MAX_SCENE_JSON_MB`, `MAX_ASSET_REQUEST_JSON_MB`, `MAX_UPLOAD_JSON_MB`, `MAX_RENDER_JSON_MB`, limites configurables por entorno.
+
+Para correrlo local:
+
+```bash
+cp .env.example .env
+npm install
+npm run setup:fonts
+npm start
+```
+
+Para correrlo con Docker:
+
+```bash
+docker build -t playground-backend .
+docker run --rm -p 8787:8787 --env-file .env -v playground_jobs:/data/jobs playground-backend
+```
+
+En la web publicada, tocar `Servidor` y completar la URL HTTPS del backend. Si `PIPELINE_ACCESS_TOKEN` esta configurado, pegar ese token tambien. El token queda guardado solo en el navegador del usuario.
+
+Tambien funciona por URL:
+
+```txt
+https://mschapi.github.io/playground/?apiBase=https://tu-backend.com&apiToken=tu_token&apiToken=tu_token
+```
+
+Hay mas detalle en `BACKEND_DEPLOY.md` y un ejemplo de despliegue en `render.yaml`.
 
 ## Debug y preflight
 
@@ -100,7 +141,7 @@ La carpeta `web/` puede publicarse como GitHub Pages, pero el backend con APIs d
 Para probar en tu maquina:
 
 ```bash
-node src/server.js
+npm start
 ```
 
 Y abri `http://localhost:8787`.
@@ -108,7 +149,7 @@ Y abri `http://localhost:8787`.
 Para usar `https://mschapi.github.io/playground/` desde otra computadora, desplega `src/server.js` en un backend publico y cargalo desde el boton `Servidor`, o abri la URL asi:
 
 ```txt
-https://mschapi.github.io/playground/?apiBase=https://tu-backend.com
+https://mschapi.github.io/playground/?apiBase=https://tu-backend.com&apiToken=tu_token
 ```
 
 ## Uso local
@@ -175,6 +216,12 @@ Tambien se aceptan los nombres tecnicos de entorno, por ejemplo `OPENAI_API_KEY`
 
 ## Variables principales
 
+- `HOST=0.0.0.0`
+- `PORT=8787`
+- `PUBLIC_BASE_URL`
+- `CORS_ORIGIN`
+- `PIPELINE_ACCESS_TOKEN`, recomendado en backends compartidos
+- `OUTPUT_ROOT`
 - `OPENAI_API_KEY`
 - `PEXELS_API_KEY`
 - `BRIGHTDATA_API_KEY`
@@ -188,18 +235,18 @@ Tambien se aceptan los nombres tecnicos de entorno, por ejemplo `OPENAI_API_KEY`
 
 ## GitHub Pages
 
-El workflow `.github/workflows/deploy-pages.yml` publica la UI estatica de `web/` en GitHub Pages. Esa UI no contiene secrets. Para usar APIs sin exponer keys necesita conectarse a un backend Node con `src/server.js` corriendo en una maquina o servidor.
+GitHub Pages publica solo la UI estatica. Esa UI no contiene secrets. Para usar APIs sin exponer keys necesita conectarse a un backend Node con `src/server.js` corriendo en una maquina o servidor.
 
 En local:
 
 ```bash
-node src/server.js
+npm start
 ```
 
 En una pagina publicada, usa el boton `Servidor` para guardar el backend publico. Tambien podes pasarlo por query string:
 
 ```txt
-https://mschapi.github.io/playground/?apiBase=https://tu-backend.com
+https://mschapi.github.io/playground/?apiBase=https://tu-backend.com&apiToken=tu_token
 ```
 
 ## GitHub Actions

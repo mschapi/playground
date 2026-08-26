@@ -1,4 +1,5 @@
 let API_BASE = resolveApiBase();
+let API_TOKEN = resolveApiToken();
 
 const state = {
   job: null,
@@ -25,6 +26,7 @@ const els = {
   serverButton: document.querySelector('#serverButton'),
   serverPanel: document.querySelector('#serverPanel'),
   apiBaseInput: document.querySelector('#apiBaseInput'),
+  apiTokenInput: document.querySelector('#apiTokenInput'),
   saveServerButton: document.querySelector('#saveServerButton'),
   localServerButton: document.querySelector('#localServerButton'),
   clearServerButton: document.querySelector('#clearServerButton'),
@@ -182,13 +184,23 @@ function bindEvents() {
 async function loadHealth() {
   try {
     const health = await api('/api/health', { timeoutMs: 3500 });
+    if (health.authRequired && !API_TOKEN) {
+      els.envStatus.textContent = 'Token requerido';
+      els.envStatus.className = 'status-pill warn';
+      els.serverPanel.hidden = false;
+      syncServerInput();
+    }
     if (health.apiReady) {
-      els.envStatus.textContent = 'APIs listas';
-      els.envStatus.className = 'status-pill ready';
+      if (!health.authRequired || API_TOKEN) {
+        els.envStatus.textContent = 'APIs listas';
+        els.envStatus.className = 'status-pill ready';
+      }
       els.dryRunToggle.checked = false;
     } else {
-      els.envStatus.textContent = 'Modo prueba';
-      els.envStatus.className = 'status-pill warn';
+      if (!health.authRequired || API_TOKEN) {
+        els.envStatus.textContent = 'Modo prueba';
+        els.envStatus.className = 'status-pill warn';
+      }
       els.dryRunToggle.checked = true;
     }
   } catch {
@@ -692,6 +704,7 @@ function renderDebug() {
   const events = debug?.events || [];
   els.debugLog.textContent = JSON.stringify({
     apiBase: API_BASE || 'local',
+    hasApiToken: Boolean(API_TOKEN),
     publishedPage: isPublishedPage(),
     preflight: state.preflight,
     job: state.job ? {
@@ -1097,37 +1110,47 @@ async function api(path, options = {}) {
   if (!API_BASE && isPublishedPage()) {
     throw new Error('Falta configurar un backend HTTPS en Servidor');
   }
-  const { timeoutMs = 0, ...fetchOptions } = options;
-  const controller = timeoutMs > 0 ? new AbortController() : null;
-  const timeout = controller ? window.setTimeout(() => controller.abort(), timeoutMs) : null;
-  const requestOptions = {
-    headers: { 'Content-Type': 'application/json' },
-    ...fetchOptions
-  };
-  if (controller && !requestOptions.signal) requestOptions.signal = controller.signal;
-
+  const { timeoutMs, headers: customHeaders = {}, ...fetchOptions } = options;
+  const headers = { 'Content-Type': 'application/json', ...customHeaders };
+  if (API_TOKEN) headers.Authorization = 'Bearer ' + API_TOKEN;
+  const controller = timeoutMs ? new AbortController() : null;
+  const timer = timeoutMs ? window.setTimeout(() => controller.abort(), timeoutMs) : null;
+  let response;
   try {
-    const response = await fetch(API_BASE + path, requestOptions);
-    const data = await response.json().catch(() => ({}));
-    if (!response.ok) throw new Error(data.error || 'Error de servidor');
-    return data;
+    response = await fetch(API_BASE + path, {
+      headers,
+      signal: controller?.signal,
+      ...fetchOptions
+    });
   } catch (error) {
     if (error.name === 'AbortError') throw new Error('Backend no responde');
     throw error;
   } finally {
-    if (timeout) window.clearTimeout(timeout);
+    if (timer) window.clearTimeout(timer);
   }
+  const data = await response.json().catch(() => ({}));
+  if (response.status === 401) {
+    els.serverPanel.hidden = false;
+    syncServerInput();
+  }
+  if (!response.ok) throw new Error(data.error || 'Error de servidor');
+  return data;
 }
 
 function syncServerInput() {
   els.apiBaseInput.value = API_BASE || '';
+  if (els.apiTokenInput) els.apiTokenInput.value = API_TOKEN || '';
 }
 
 async function saveServerBase() {
   const clean = els.apiBaseInput.value.trim().replace(/\/$/, '');
+  const token = els.apiTokenInput?.value.trim() || '';
   if (!clean) return clearServerBase();
   localStorage.setItem('playgroundApiBase', clean);
+  if (token) localStorage.setItem('playgroundApiToken', token);
+  else localStorage.removeItem('playgroundApiToken');
   API_BASE = clean;
+  API_TOKEN = token;
   await loadHealth();
   await loadPreflight();
   renderAll();
@@ -1137,6 +1160,8 @@ async function useLocalServerBase() {
   const localBase = 'http://localhost:8787';
   localStorage.setItem('playgroundApiBase', localBase);
   API_BASE = localBase;
+  API_TOKEN = els.apiTokenInput?.value.trim() || API_TOKEN;
+  if (API_TOKEN) localStorage.setItem('playgroundApiToken', API_TOKEN);
   syncServerInput();
   await loadHealth();
   await loadPreflight();
@@ -1145,7 +1170,9 @@ async function useLocalServerBase() {
 
 async function clearServerBase() {
   localStorage.removeItem('playgroundApiBase');
+  localStorage.removeItem('playgroundApiToken');
   API_BASE = resolveApiBase();
+  API_TOKEN = resolveApiToken();
   syncServerInput();
   await loadHealth();
   await loadPreflight();
@@ -1189,4 +1216,14 @@ function resolveApiBase() {
   if (saved) return saved.replace(/\/$/, '');
   if (location.hostname === 'localhost' || location.hostname === '127.0.0.1') return '';
   return '';
+}
+
+function resolveApiToken() {
+  const params = new URLSearchParams(location.search);
+  const queryToken = params.get('apiToken') || params.get('token');
+  if (queryToken) {
+    localStorage.setItem('playgroundApiToken', queryToken);
+    return queryToken;
+  }
+  return localStorage.getItem('playgroundApiToken') || '';
 }

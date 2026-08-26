@@ -8,3 +8,4 @@ bright_data_country=ar
 bright_data_language=es-419
 bright_data_format=raw
 bright_data_unblock_data_format=parsed_light
+pipeline_token=xx_backend_token_opcional

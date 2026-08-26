@@ -1,7 +1,7 @@
 import { createServer } from 'node:http';
 import { execFile } from 'node:child_process';
 import { createReadStream, existsSync, readFileSync, statSync, writeFileSync } from 'node:fs';
-import { extname, join, parse, relative, resolve } from 'node:path';
+import { extname, join, parse, relative, resolve, sep } from 'node:path';
 import { promisify } from 'node:util';
 import { loadConfig } from './config.js';
 import { splitScenesWithOpenAI } from './llm/openai.js';
@@ -22,11 +22,14 @@ import {
   writeJson,
   writeText
 } from './utils/files.js';
+import { env, numberEnv } from './utils/env.js';
 
-const PORT = Number(process.env.PORT || 8787);
 const ROOT = resolve('.');
 const WEB_ROOT = resolve('web');
 const config = loadConfig();
+const PORT = Number(process.env.PORT || 8787);
+const HOST = process.env.HOST || '0.0.0.0';
+const serverSettings = loadServerSettings();
 const jobs = new Map();
 const execFileAsync = promisify(execFile);
 
@@ -38,15 +41,80 @@ const server = createServer(async (request, response) => {
     return;
   }
   try {
+    if (isProtectedApiRequest(request) && !isAuthorized(request)) {
+      return sendJson(response, 401, { error: 'Backend protegido: configura el token en Servidor' });
+    }
     await route(request, response);
   } catch (error) {
     sendJson(response, 500, { error: error.message });
   }
 });
 
-server.listen(PORT, () => {
-  console.log('[web] listo en http://localhost:' + PORT);
+server.listen(PORT, HOST, () => {
+  const displayHost = HOST === '0.0.0.0' ? 'localhost' : HOST;
+  console.log('[web] listo en http://' + displayHost + ':' + PORT);
+  if (serverSettings.publicBaseUrl) console.log('[web] backend publico ' + serverSettings.publicBaseUrl);
 });
+
+function loadServerSettings() {
+  return {
+    accessToken: env('PIPELINE_ACCESS_TOKEN', { defaultValue: env('BACKEND_ACCESS_TOKEN', { defaultValue: '' }) }),
+    publicBaseUrl: cleanBaseUrl(env('PUBLIC_BASE_URL', { defaultValue: '' })),
+    scriptJsonLimitBytes: megabytesEnv('MAX_SCRIPT_JSON_MB', 2),
+    sceneJsonLimitBytes: megabytesEnv('MAX_SCENE_JSON_MB', 20),
+    assetRequestJsonLimitBytes: megabytesEnv('MAX_ASSET_REQUEST_JSON_MB', 4),
+    uploadJsonLimitBytes: megabytesEnv('MAX_UPLOAD_JSON_MB', 80),
+    renderJsonLimitBytes: megabytesEnv('MAX_RENDER_JSON_MB', 300)
+  };
+}
+
+function megabytesEnv(name, fallback) {
+  const value = numberEnv(name, fallback);
+  return Math.max(1, value) * 1024 * 1024;
+}
+
+function cleanBaseUrl(value) {
+  return String(value || '').trim().replace(/\/+$/, '');
+}
+
+function isProtectedApiRequest(request) {
+  if (!serverSettings.accessToken) return false;
+  const url = new URL(request.url, 'http://localhost:' + PORT);
+  if (!url.pathname.startsWith('/api/')) return false;
+  if (request.method === 'GET' && /^\/api\/jobs\/[^/]+\/(?:file|download)$/.test(url.pathname)) return false;
+  return !(url.pathname === '/api/health' || url.pathname === '/api/preflight');
+}
+
+function isAuthorized(request) {
+  return readAccessToken(request) === serverSettings.accessToken;
+}
+
+function readAccessToken(request) {
+  const authHeader = String(request.headers.authorization || '');
+  const bearer = authHeader.match(/^Bearer\s+(.+)$/i)?.[1];
+  return String(bearer || request.headers['x-pipeline-token'] || '').trim();
+}
+
+function safeServerSummary() {
+  return {
+    host: HOST,
+    port: PORT,
+    publicBaseUrl: serverSettings.publicBaseUrl || null,
+    authRequired: Boolean(serverSettings.accessToken),
+    corsOrigin: process.env.CORS_ORIGIN || '*',
+    limitsMb: {
+      scriptJson: bytesToMb(serverSettings.scriptJsonLimitBytes),
+      sceneJson: bytesToMb(serverSettings.sceneJsonLimitBytes),
+      assetRequestJson: bytesToMb(serverSettings.assetRequestJsonLimitBytes),
+      uploadJson: bytesToMb(serverSettings.uploadJsonLimitBytes),
+      renderJson: bytesToMb(serverSettings.renderJsonLimitBytes)
+    }
+  };
+}
+
+function bytesToMb(value) {
+  return Math.round((Number(value || 0) / 1024 / 1024) * 10) / 10;
+}
 
 async function route(request, response) {
   const url = new URL(request.url, 'http://localhost:' + PORT);
@@ -58,7 +126,10 @@ async function route(request, response) {
       apiReady: preflight.requiredReady,
       driveReady: preflight.checks.drive.ready,
       videoEnabled: config.video.enabled,
-      outputRoot: config.outputRoot
+      outputRoot: config.outputRoot,
+      authRequired: Boolean(serverSettings.accessToken),
+      publicBaseUrl: serverSettings.publicBaseUrl || null,
+      server: safeServerSummary()
     });
   }
 
@@ -67,7 +138,7 @@ async function route(request, response) {
   }
 
   if (url.pathname === '/api/jobs' && request.method === 'POST') {
-    const body = await readJsonBody(request);
+    const body = await readJsonBody(request, serverSettings.scriptJsonLimitBytes);
     const job = createJob(body);
     runJob(job).catch((error) => updateJob(job, { status: 'error', phase: 'error', error: error.message }));
     return sendJson(response, 202, publicJob(job));
@@ -87,7 +158,7 @@ async function route(request, response) {
     }
 
     if (action === 'scenes' && request.method === 'PATCH') {
-      const body = await readJsonBody(request, 20 * 1024 * 1024);
+      const body = await readJsonBody(request, serverSettings.sceneJsonLimitBytes);
       const scenes = updateJobScenes(job, body.scenes || []);
       debugEvent(job, 'scenes_edit', 'ok', {
         sceneCount: scenes.length,
@@ -98,13 +169,13 @@ async function route(request, response) {
     }
 
     if (action === 'assets' && request.method === 'POST') {
-      const body = await readJsonBody(request, 4 * 1024 * 1024);
+      const body = await readJsonBody(request, serverSettings.assetRequestJsonLimitBytes);
       startAssetGeneration(job, body).catch((error) => updateJob(job, { status: 'error', phase: 'assets_error', error: error.message }));
       return sendJson(response, 202, publicJob(job));
     }
 
     if (action === 'import-asset' && request.method === 'POST') {
-      const body = await readJsonBody(request, 80 * 1024 * 1024);
+      const body = await readJsonBody(request, serverSettings.uploadJsonLimitBytes);
       const asset = importJobAsset(job, body);
       debugEvent(job, 'asset_import', 'ok', {
         scene_id: asset.scene_id,
@@ -115,7 +186,7 @@ async function route(request, response) {
     }
 
     if (action === 'render' && request.method === 'POST') {
-      const body = await readJsonBody(request, 300 * 1024 * 1024);
+      const body = await readJsonBody(request, serverSettings.renderJsonLimitBytes);
       startRender(job, body).catch((error) => updateJob(job, { status: 'error', phase: 'render_error', error: error.message }));
       return sendJson(response, 202, publicJob(job));
     }
@@ -1358,7 +1429,8 @@ async function getPreflight() {
     allReady: Object.values(checks).every((check) => check.ready || !check.required),
     outputRoot: config.outputRoot,
     checks,
-    config: safeConfigSummary()
+    config: safeConfigSummary(),
+    server: safeServerSummary()
   };
 }
 
@@ -1413,7 +1485,8 @@ function loadJob(jobId) {
 
 function sendJobFile(response, job, relPath, request) {
   const resolved = resolve(job.jobDir, relPath);
-  if (!resolved.startsWith(resolve(job.jobDir))) {
+  const rootDir = resolve(job.jobDir);
+  if (resolved !== rootDir && !resolved.startsWith(rootDir + sep)) {
     return sendJson(response, 403, { error: 'Archivo fuera del job' });
   }
   if (!existsSync(resolved)) return sendJson(response, 404, { error: 'Archivo no encontrado' });
@@ -1455,7 +1528,7 @@ function sendJobFile(response, job, relPath, request) {
 function serveStatic(response, pathname) {
   const clean = pathname === '/' ? '/index.html' : pathname;
   const resolved = resolve(WEB_ROOT, '.' + decodeURIComponent(clean));
-  if (!resolved.startsWith(WEB_ROOT) || !existsSync(resolved)) {
+  if ((resolved !== WEB_ROOT && !resolved.startsWith(WEB_ROOT + sep)) || !existsSync(resolved)) {
     response.writeHead(404, withCors({ 'Content-Type': 'text/plain; charset=utf-8' }));
     response.end('No encontrado');
     return;
@@ -1472,7 +1545,7 @@ async function readJsonBody(request, limit = 2 * 1024 * 1024) {
   let size = 0;
   for await (const chunk of request) {
     size += chunk.length;
-    if (size > limit) throw new Error('Payload demasiado grande');
+    if (size > limit) throw new Error('Payload demasiado grande. Limite actual: ' + bytesToMb(limit) + ' MB');
     chunks.push(chunk);
   }
   const raw = Buffer.concat(chunks).toString('utf8');
@@ -1496,7 +1569,7 @@ function withCors(headers = {}) {
     ...headers,
     'Access-Control-Allow-Origin': process.env.CORS_ORIGIN || '*',
     'Access-Control-Allow-Methods': 'GET,POST,PATCH,OPTIONS',
-    'Access-Control-Allow-Headers': 'Content-Type,Range',
+    'Access-Control-Allow-Headers': 'Content-Type,Range,Authorization,X-Pipeline-Token',
     'Access-Control-Expose-Headers': 'Content-Length,Content-Range,Accept-Ranges'
   };
 }

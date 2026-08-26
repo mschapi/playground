@@ -4,7 +4,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Playground de guiones</title>
-    <link rel="stylesheet" href="styles.css?v=20260825-subtitles" />
+    <link rel="stylesheet" href="styles.css?v=20260825-general-backend" />
   </head>
   <body>
     <main class="app-shell">
@@ -22,6 +22,9 @@
       <section class="server-panel" id="serverPanel" hidden>
         <label class="field-label">Backend
           <input class="scene-input" id="apiBaseInput" placeholder="https://tu-backend.com" />
+        </label>
+        <label class="field-label">Token
+          <input class="scene-input" id="apiTokenInput" type="password" autocomplete="off" placeholder="Opcional" />
         </label>
         <div class="actions-row compact-actions">
           <button class="secondary" id="localServerButton">Usar local</button>
@@ -195,6 +198,6 @@
       <div class="empty-state">Todavia no hay resultados.</div>
     </template>
 
-    <script src="app.js?v=20260825-subtitles" type="module"></script>
+    <script src="app.js?v=20260825-general-backend" type="module"></script>
   </body>
 </html>

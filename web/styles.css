@@ -70,7 +70,7 @@ button:disabled {
   max-width: 1500px;
   margin: 0 auto 18px;
   display: grid;
-  grid-template-columns: minmax(260px, 1fr) auto;
+  grid-template-columns: minmax(260px, 1fr) minmax(180px, 260px) auto;
   gap: 12px;
   align-items: end;
   background: var(--paper);

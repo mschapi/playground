@@ -10,9 +10,10 @@
   "scripts": {
     "pipeline": "node src/index.js",
     "dry-run": "node src/index.js --script-file examples/sample-script.txt --dry-run",
-    "check": "node --check src/index.js && node --check src/server.js",
+    "check": "node --check src/index.js && node --check src/server.js && node --check web/app.js && node --check src/video/ffmpeg.js",
     "web": "node src/server.js",
     "setup:fonts": "node scripts/setup-fonts.mjs",
-    "setup:ffmpeg:windows": "powershell -ExecutionPolicy Bypass -File scripts/setup-windows-ffmpeg.ps1"
+    "setup:ffmpeg:windows": "powershell -ExecutionPolicy Bypass -File scripts/setup-windows-ffmpeg.ps1",
+    "start": "node src/server.js"
   }
 }

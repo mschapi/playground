@@ -26,7 +26,10 @@ const keyAliases = new Map([
   ['brightdata_unblock_data_format', 'BRIGHTDATA_UNBLOCK_DATA_FORMAT'],
   ['bright_data_unblock_data_format', 'BRIGHTDATA_UNBLOCK_DATA_FORMAT'],
   ['drive_parent_folder', 'DRIVE_PARENT_FOLDER_ID'],
-  ['drive_parent_folder_id', 'DRIVE_PARENT_FOLDER_ID']
+  ['drive_parent_folder_id', 'DRIVE_PARENT_FOLDER_ID'],
+  ['backend_token', 'PIPELINE_ACCESS_TOKEN'],
+  ['pipeline_token', 'PIPELINE_ACCESS_TOKEN'],
+  ['pipeline_access_token', 'PIPELINE_ACCESS_TOKEN']
 ]);
 
 export function loadDotEnv(filePath = '.env', options = {}) {
